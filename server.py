@@ -2,7 +2,8 @@
 """
 GoonClient Cosmetics-Backend (nur Python-Standardbibliothek, Python 3.9+).
 
-Speichert pro Spieler-UUID, welche Cape, welches Badge und welches animierte Namensschild er ausgerüstet hat,
+Speichert pro Spieler-UUID, welche Cape, welches Badge, welches animierte Namensschild und welchen Hut, welche Flügel
+und welches Accessoire er ausgerüstet hat,
 und liefert das an andere GoonClient-Spieler aus. Damit sehen sich GoonClient-Nutzer gegenseitig auf JEDEM Server,
 auch auf Servern ohne GoonClient (z.B. DuelPrac.net).
 
@@ -21,9 +22,21 @@ Schnittstelle (alles JSON):
   POST /v1/auth/verify   {"username","serverId"} -> {"token","uuid","expiresIn"}
   PUT  /v1/cosmetics     (Authorization: Bearer <token>) Body: Cosmetics-Objekt
   GET  /v1/cosmetics?uuids=<uuid>,<uuid>,...   (höchstens 100) -> {"players": {"<uuid>": Cosmetics-Objekt}}
+  POST /v1/redeem/code   (Authorization: Bearer <token>) {"code": "<eingetippter Code>"} -> 200 {"ok", "id", "coins"},
+                         400 ungültig, 409 schon eingelöst, 410 abgelaufen/aufgebraucht. Codes stehen in codes.json (add_code.py).
+  POST /v1/redeem        (alt, Client 3.8-3.9) {"id": "<code-id>"} -> 200 {"ok": true} oder 409 (schon eingelöst)
+  Freunde (alle mit Authorization: Bearer <token>):
+  GET  /v1/friends                         -> {"incoming": [...], "outgoing": [...], "friends": [...]}
+  POST /v1/friends/request  {"uuid"}       -> {"status": "sent" | "friends"}
+  POST /v1/friends/respond  {"uuid", "accept": true|false} -> {"status": "friends" | "declined"}, 404 ohne Anfrage
+  POST /v1/friends/remove   {"uuid"}       -> {"status": "removed"}
+  PUT  /v1/stats            {"coins", "earned", "playSeconds", "owned": [item-ids]}
+  GET  /v1/friends/profile?uuid=<uuid>     -> Stats + Cosmetics, nur für bestätigte Freunde (sonst 403)
 """
 import argparse
+import hashlib
 import json
+import os
 import re
 import secrets
 import sqlite3
@@ -36,8 +49,9 @@ import uuid as uuidlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ID_RE = re.compile(r"^[a-z0-9_]{0,24}$")
-MAX_BODY = 2048
+MAX_BODY = 16384
 MAX_UUIDS = 100
+MAX_CODE_COINS = 100000
 CHALLENGE_TTL = 60
 TOKEN_TTL = 3600
 RECORD_MAX_AGE = 60 * 24 * 3600  # 60 Tage ohne Lebenszeichen: Eintrag wird gelöscht
@@ -45,6 +59,7 @@ RECORD_MAX_AGE = 60 * 24 * 3600  # 60 Tage ohne Lebenszeichen: Eintrag wird gel�
 DEFAULTS = {
     "cape": "", "badge": "", "badgeColor": 0xFFFFFF, "badgeText": "", "badgePrefix": False,
     "tag": "", "tagColor1": 0xFFFFFF, "tagColor2": 0xFFFFFF, "tagSpeed": 0, "tagBold": False,
+    "hat": "", "wings": "", "accessory": "",
 }
 
 
@@ -88,6 +103,33 @@ def clean_cosmetics(raw):
         "tagColor2": as_int(raw.get("tagColor2"), 0, 0xFFFFFF, 0xFFFFFF),
         "tagSpeed": as_int(raw.get("tagSpeed"), 0, 400, 0),
         "tagBold": raw.get("tagBold") is True,
+        # 3D-Accessoires (ab Client 3.7.0); ältere Clients schicken sie nicht und bekommen leere Werte
+        "hat": as_id(raw.get("hat")),
+        "wings": as_id(raw.get("wings")),
+        "accessory": as_id(raw.get("accessory")),
+    }
+
+
+ITEM_RE = re.compile(r"^[a-z]+\.[a-z0-9_]{1,24}$")
+MAX_PENDING_REQUESTS = 200
+MAX_OWNED = 400
+
+
+def clean_stats(raw):
+    """Prüft die Stats eines Spielers (Goon Coins, Spielzeit, gekaufte Items). Unbekanntes wird verworfen."""
+    if not isinstance(raw, dict):
+        raise ValueError("body must be a JSON object")
+    owned = raw.get("owned")
+    items = []
+    if isinstance(owned, list):
+        for it in owned[:MAX_OWNED]:
+            if isinstance(it, str) and ITEM_RE.match(it) and it not in items:
+                items.append(it)
+    return {
+        "coins": as_int(raw.get("coins"), 0, 10 ** 9, 0),
+        "earned": as_int(raw.get("earned"), 0, 10 ** 9, 0),
+        "playSeconds": as_int(raw.get("playSeconds"), 0, 10 ** 10, 0),
+        "owned": items,
     }
 
 
@@ -100,6 +142,16 @@ class Store:
         self.lock = threading.Lock()
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.execute("CREATE TABLE IF NOT EXISTS cosmetics (uuid TEXT PRIMARY KEY, data TEXT NOT NULL, updated REAL NOT NULL)")
+        # Eingelöste Codes: pro Spieler und Code genau eine Zeile (wird nie gelöscht)
+        self.db.execute("CREATE TABLE IF NOT EXISTS redeemed (uuid TEXT NOT NULL, code TEXT NOT NULL, at REAL NOT NULL, "
+                        "PRIMARY KEY (uuid, code))")
+        # Freunde (ab Client 3.9.0): bestätigte Namen, offene Anfragen, Freundschaften (a < b) und Stats
+        self.db.execute("CREATE TABLE IF NOT EXISTS names (uuid TEXT PRIMARY KEY, name TEXT NOT NULL)")
+        self.db.execute("CREATE TABLE IF NOT EXISTS friend_requests (src TEXT NOT NULL, dst TEXT NOT NULL, at REAL NOT NULL, "
+                        "PRIMARY KEY (src, dst))")
+        self.db.execute("CREATE TABLE IF NOT EXISTS friendships (a TEXT NOT NULL, b TEXT NOT NULL, since REAL NOT NULL, "
+                        "PRIMARY KEY (a, b))")
+        self.db.execute("CREATE TABLE IF NOT EXISTS stats (uuid TEXT PRIMARY KEY, data TEXT NOT NULL, updated REAL NOT NULL)")
         self.db.commit()
         self.purge()
 
@@ -115,6 +167,104 @@ class Store:
                             (uid, json.dumps(data), time.time()))
             self.db.commit()
 
+    def claim_count(self, code):
+        with self.lock:
+            return self.db.execute("SELECT COUNT(*) FROM redeemed WHERE code=?", (code,)).fetchone()[0]
+
+    def claim(self, uid, code):
+        """Merkt sich, dass `uid` den Code `code` eingelöst hat. False, wenn das schon vorher geschehen ist."""
+        with self.lock:
+            cur = self.db.execute("INSERT OR IGNORE INTO redeemed(uuid, code, at) VALUES(?,?,?)", (uid, code, time.time()))
+            self.db.commit()
+            return cur.rowcount == 1
+
+    # ---------- Freunde ----------
+
+    def set_name(self, uid, name):
+        with self.lock:
+            self.db.execute("INSERT INTO names(uuid, name) VALUES(?,?) ON CONFLICT(uuid) DO UPDATE SET name=excluded.name",
+                            (uid, name))
+            self.db.commit()
+
+    def _name(self, uid):
+        row = self.db.execute("SELECT name FROM names WHERE uuid=?", (uid,)).fetchone()
+        return row[0] if row else ""
+
+    def are_friends(self, x, y):
+        a, b = sorted((x, y))
+        with self.lock:
+            return self.db.execute("SELECT 1 FROM friendships WHERE a=? AND b=?", (a, b)).fetchone() is not None
+
+    def _befriend(self, x, y):
+        a, b = sorted((x, y))
+        self.db.execute("INSERT OR IGNORE INTO friendships(a, b, since) VALUES(?,?,?)", (a, b, time.time()))
+        self.db.execute("DELETE FROM friend_requests WHERE (src=? AND dst=?) OR (src=? AND dst=?)", (x, y, y, x))
+
+    def request_friend(self, src, dst):
+        """Schickt eine Anfrage. Hat dst schon an src angefragt, werden beide sofort Freunde. Gibt den Status zurück."""
+        a, b = sorted((src, dst))
+        with self.lock:
+            if self.db.execute("SELECT 1 FROM friendships WHERE a=? AND b=?", (a, b)).fetchone():
+                return "friends"
+            if self.db.execute("SELECT 1 FROM friend_requests WHERE src=? AND dst=?", (dst, src)).fetchone():
+                self._befriend(src, dst)
+                self.db.commit()
+                return "friends"
+            pending = self.db.execute("SELECT COUNT(*) FROM friend_requests WHERE src=?", (src,)).fetchone()[0]
+            if pending >= MAX_PENDING_REQUESTS:
+                raise RuntimeError("too many pending friend requests")
+            self.db.execute("INSERT OR IGNORE INTO friend_requests(src, dst, at) VALUES(?,?,?)", (src, dst, time.time()))
+            self.db.commit()
+            return "sent"
+
+    def respond_friend(self, me, other, accept):
+        """Antwort auf eine Anfrage von `other`. None, wenn es keine solche Anfrage gibt."""
+        with self.lock:
+            if not self.db.execute("SELECT 1 FROM friend_requests WHERE src=? AND dst=?", (other, me)).fetchone():
+                return None
+            if accept:
+                self._befriend(me, other)
+            else:
+                self.db.execute("DELETE FROM friend_requests WHERE src=? AND dst=?", (other, me))
+            self.db.commit()
+            return "friends" if accept else "declined"
+
+    def remove_friend(self, me, other):
+        a, b = sorted((me, other))
+        with self.lock:
+            self.db.execute("DELETE FROM friendships WHERE a=? AND b=?", (a, b))
+            self.db.execute("DELETE FROM friend_requests WHERE (src=? AND dst=?) OR (src=? AND dst=?)", (me, other, other, me))
+            self.db.commit()
+
+    def friends_overview(self, me):
+        with self.lock:
+            incoming = [{"uuid": r[0], "name": self._name(r[0]), "at": int(r[1] * 1000)} for r in
+                        self.db.execute("SELECT src, at FROM friend_requests WHERE dst=? ORDER BY at", (me,)).fetchall()]
+            outgoing = [{"uuid": r[0], "name": self._name(r[0])} for r in
+                        self.db.execute("SELECT dst FROM friend_requests WHERE src=?", (me,)).fetchall()]
+            friends = []
+            for a, b, since in self.db.execute("SELECT a, b, since FROM friendships WHERE a=? OR b=?", (me, me)).fetchall():
+                other = b if a == me else a
+                friends.append({"uuid": other, "name": self._name(other), "since": int(since * 1000)})
+        return {"incoming": incoming, "outgoing": outgoing, "friends": friends}
+
+    def put_stats(self, uid, data):
+        with self.lock:
+            self.db.execute("INSERT INTO stats(uuid, data, updated) VALUES(?,?,?) "
+                            "ON CONFLICT(uuid) DO UPDATE SET data=excluded.data, updated=excluded.updated",
+                            (uid, json.dumps(data), time.time()))
+            self.db.commit()
+
+    def friend_profile(self, uid):
+        with self.lock:
+            st = self.db.execute("SELECT data, updated FROM stats WHERE uuid=?", (uid,)).fetchone()
+            cos = self.db.execute("SELECT data FROM cosmetics WHERE uuid=?", (uid,)).fetchone()
+            name = self._name(uid)
+        stats = json.loads(st[0]) if st else None
+        if stats is not None:
+            stats["updated"] = int(st[1] * 1000)
+        return {"uuid": uid, "name": name, "stats": stats, "cosmetics": json.loads(cos[0]) if cos else None}
+
     def get_many(self, uids):
         result = {}
         with self.lock:
@@ -123,6 +273,116 @@ class Store:
                 if row:
                     result[uid] = json.loads(row[0])
         return result
+
+
+CODE_SALT = "goonclient-code-v1|"
+CODE_ID_RE = re.compile(r"^[a-z0-9_]{1,32}$")
+CODE_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def normalize_code(text):
+    """Wie RedeemCodes.normalize im Client: nur A-Z und 0-9, großgeschrieben."""
+    return "".join(ch for ch in text.upper() if ("A" <= ch <= "Z") or ("0" <= ch <= "9"))
+
+
+def hash_code(normalized):
+    return hashlib.sha256((CODE_SALT + normalized).encode("utf-8")).hexdigest()
+
+
+class Codes:
+    """
+    Einlösbare Goon-Coins-Codes aus codes.json (nur Hashes, der Klartext steht nirgends). Die Datei wird bei jeder Abfrage
+    auf Änderungen geprüft; neue Codes gelten also sofort, ohne Neustart und ohne neue Client-Version.
+    Eintrag: {"id": "bonus3000", "hash": "<sha256>", "coins": 3000, "maxUses": 50, "expires": "2026-12-31"}
+    (maxUses = höchstens so viele Spieler insgesamt, expires = letzter gültiger Tag; beide optional).
+    """
+
+    def __init__(self, path):
+        self.path = path
+        self.lock = threading.Lock()
+        self.mtime = None
+        self.by_hash = {}
+
+    def _reload(self):
+        try:
+            mtime = os.path.getmtime(self.path)
+        except OSError:
+            self.by_hash, self.mtime = {}, None
+            return
+        if mtime == self.mtime:
+            return
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                raw = json.load(f)
+        except (OSError, ValueError) as e:
+            print("codes.json could not be read: %s" % e)
+            return  # alte Liste behalten
+        table = {}
+        for c in raw.get("codes", []) if isinstance(raw, dict) else []:
+            if not isinstance(c, dict):
+                continue
+            cid, h, coins = c.get("id"), c.get("hash"), c.get("coins")
+            if not (isinstance(cid, str) and CODE_ID_RE.match(cid) and isinstance(h, str) and CODE_HASH_RE.match(h)
+                    and isinstance(coins, int) and not isinstance(coins, bool) and 0 < coins <= MAX_CODE_COINS):
+                print("codes.json: invalid entry skipped: %r" % (c,))
+                continue
+            max_uses = c.get("maxUses")
+            table[h] = {"id": cid, "coins": coins,
+                        "maxUses": max_uses if isinstance(max_uses, int) and max_uses > 0 else None,
+                        "expires": c.get("expires") if isinstance(c.get("expires"), str) else None}
+        self.by_hash, self.mtime = table, mtime
+
+    def find(self, text):
+        normalized = normalize_code(text) if isinstance(text, str) else ""
+        if not normalized or len(normalized) > 64:
+            return None
+        with self.lock:
+            self._reload()
+            return self.by_hash.get(hash_code(normalized))
+
+
+def code_expired(entry):
+    exp = entry.get("expires")
+    if not exp:
+        return False
+    try:
+        return time.strftime("%Y-%m-%d", time.gmtime()) > exp
+    except (TypeError, ValueError):
+        return False
+
+
+# Alte Ids (laugh, heart, cry, celebrate) bleiben erlaubt, damit ältere Clients nicht abgewiesen werden
+EMOTE_IDS = {"wave", "dance", "flex", "dab", "salute", "spin", "orangejustice", "levitate",
+             "laugh", "heart", "cry", "celebrate"}
+EMOTE_TTL = 8.0  # so lange bleibt ein Emote abrufbar (Sekunden)
+
+
+class Emotes:
+    """Das zuletzt gestartete Emote je Spieler, nur im Speicher (geht beim Neustart verloren, ist ohnehin kurzlebig)."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.data = {}  # uuid -> [id, seq, startzeit]
+        self.seq = 0
+
+    def start(self, uid, emote):
+        with self.lock:
+            now = time.time()
+            for k in [k for k, v in self.data.items() if now - v[2] > EMOTE_TTL]:
+                del self.data[k]
+            self.seq += 1
+            self.data[uid] = [emote, self.seq, now]
+            return self.seq
+
+    def get_many(self, uids):
+        out = {}
+        now = time.time()
+        with self.lock:
+            for uid in uids:
+                v = self.data.get(uid)
+                if v and now - v[2] < EMOTE_TTL:
+                    out[uid] = {"id": v[0], "seq": v[1], "ageMs": int((now - v[2]) * 1000)}
+        return out
 
 
 class RateLimiter:
@@ -152,6 +412,8 @@ class State:
         self.args = args
         self.store = Store(args.db)
         self.limiter = RateLimiter()
+        self.emotes = Emotes()
+        self.codes = Codes(args.codes)
         self.lock = threading.Lock()
         self.challenges = {}   # serverId -> Ablaufzeit
         self.tokens = {}       # token -> (uuid, Ablaufzeit)
@@ -271,16 +533,93 @@ def make_handler(state):
                     if len(uids) > MAX_UUIDS:
                         return self.error(400, "too many uuids (max %d)" % MAX_UUIDS)
                     return self.send_json(200, {"players": state.store.get_many(list(dict.fromkeys(uids)))})
+                if parsed.path == "/v1/emotes":
+                    if not self.guard("emotes", 600):
+                        return
+                    qs = urllib.parse.parse_qs(parsed.query)
+                    raw = ",".join(qs.get("uuids", [])).split(",")
+                    uids = [norm_uuid(p.strip()) for p in raw if p.strip()]
+                    if len(uids) > MAX_UUIDS:
+                        return self.error(400, "too many uuids (max %d)" % MAX_UUIDS)
+                    return self.send_json(200, {"players": state.emotes.get_many(list(dict.fromkeys(uids)))})
+                if parsed.path in ("/v1/friends", "/v1/friends/profile"):
+                    if not self.guard("friends", 240):
+                        return
+                    uid = state.uuid_for(self.bearer())
+                    if uid is None:
+                        return self.error(401, "not logged in")
+                    if parsed.path == "/v1/friends":
+                        return self.send_json(200, state.store.friends_overview(uid))
+                    other = norm_uuid(urllib.parse.parse_qs(parsed.query).get("uuid", [""])[0])
+                    if other != uid and not state.store.are_friends(uid, other):
+                        return self.error(403, "only friends can see stats")
+                    return self.send_json(200, state.store.friend_profile(other))
                 return self.error(404, "not found")
             except ValueError:
                 return self.error(400, "bad request")
 
         def do_POST(self):
             parsed = urllib.parse.urlparse(self.path)
-            if not self.guard("auth", 30):
+            is_emote = parsed.path == "/v1/emote"
+            is_redeem = parsed.path in ("/v1/redeem", "/v1/redeem/code")
+            is_friends = parsed.path.startswith("/v1/friends/")
+            group, limit = ("emote", 60) if is_emote else ("redeem", 20) if is_redeem \
+                else ("friends_write", 60) if is_friends else ("auth", 30)
+            if not self.guard(group, limit):
                 return
             try:
                 body = self.read_json()  # immer lesen, sonst bleiben Bytes auf der Verbindung liegen
+                if is_friends:
+                    uid = state.uuid_for(self.bearer())
+                    if uid is None:
+                        return self.error(401, "not logged in")
+                    other = norm_uuid(body.get("uuid", ""))
+                    if other == uid:
+                        return self.error(400, "that is you")
+                    if parsed.path == "/v1/friends/request":
+                        return self.send_json(200, {"status": state.store.request_friend(uid, other)})
+                    if parsed.path == "/v1/friends/respond":
+                        status = state.store.respond_friend(uid, other, body.get("accept") is True)
+                        if status is None:
+                            return self.error(404, "no such friend request")
+                        return self.send_json(200, {"status": status})
+                    if parsed.path == "/v1/friends/remove":
+                        state.store.remove_friend(uid, other)
+                        return self.send_json(200, {"status": "removed"})
+                    return self.error(404, "not found")
+                if parsed.path == "/v1/redeem/code":
+                    # Neuer Weg (ab Client 3.10.0): der Spieler schickt den eingetippten Code, das Backend prüft ihn
+                    uid = state.uuid_for(self.bearer())
+                    if uid is None:
+                        return self.error(401, "not logged in")
+                    entry = state.codes.find(body.get("code"))
+                    if entry is None:
+                        return self.error(400, "invalid code")
+                    if code_expired(entry):
+                        return self.error(410, "code expired")
+                    if entry["maxUses"] is not None and state.store.claim_count(entry["id"]) >= entry["maxUses"]:
+                        return self.error(410, "code used up")
+                    if not state.store.claim(uid, entry["id"]):
+                        return self.error(409, "already redeemed")
+                    return self.send_json(200, {"ok": True, "id": entry["id"], "coins": entry["coins"]})
+                if is_redeem:
+                    uid = state.uuid_for(self.bearer())
+                    if uid is None:
+                        return self.error(401, "not logged in")
+                    code = body.get("id")
+                    if not isinstance(code, str) or not re.fullmatch(r"[a-z0-9_]{1,32}", code):
+                        return self.error(400, "bad code id")
+                    if not state.store.claim(uid, code):
+                        return self.error(409, "already redeemed")
+                    return self.send_json(200, {"ok": True})
+                if is_emote:
+                    uid = state.uuid_for(self.bearer())
+                    if uid is None:
+                        return self.error(401, "not logged in")
+                    emote = body.get("id")
+                    if not isinstance(emote, str) or emote not in EMOTE_IDS:
+                        return self.error(400, "unknown emote")
+                    return self.send_json(200, {"ok": True, "seq": state.emotes.start(uid, emote)})
                 if parsed.path == "/v1/auth/challenge":
                     return self.send_json(200, {"serverId": state.new_challenge()})
                 if parsed.path == "/v1/auth/verify":
@@ -297,6 +636,7 @@ def make_handler(state):
                         uid = mojang_has_joined(state, username, sid)
                         if uid is None:
                             return self.error(401, "minecraft login could not be verified")
+                    state.store.set_name(uid, username)  # von Mojang bestätigter Name, für Freundesanfragen
                     return self.send_json(200, {"token": state.issue_token(uid), "uuid": uid, "expiresIn": TOKEN_TTL})
                 return self.error(404, "not found")
             except (ValueError, KeyError, AttributeError):
@@ -306,7 +646,7 @@ def make_handler(state):
 
         def do_PUT(self):
             parsed = urllib.parse.urlparse(self.path)
-            if parsed.path != "/v1/cosmetics":
+            if parsed.path not in ("/v1/cosmetics", "/v1/stats"):
                 return self.error(404, "not found")
             if not self.guard("write", 30):
                 return
@@ -314,10 +654,12 @@ def make_handler(state):
             if uid is None:
                 return self.error(401, "not logged in")
             try:
-                data = clean_cosmetics(self.read_json())
+                if parsed.path == "/v1/stats":
+                    state.store.put_stats(uid, clean_stats(self.read_json()))
+                else:
+                    state.store.put(uid, clean_cosmetics(self.read_json()))
             except (ValueError, json.JSONDecodeError):
                 return self.error(400, "bad request")
-            state.store.put(uid, data)
             return self.send_json(200, {"ok": True})
 
     return Handler
@@ -325,14 +667,21 @@ def make_handler(state):
 
 def main():
     p = argparse.ArgumentParser(description="GoonClient cosmetics backend")
-    p.add_argument("--host", default="127.0.0.1")
-    p.add_argument("--port", type=int, default=8080)
+    # Auf Render (oder anderen Hostern mit $PORT) reicht "python server.py" ohne weitere Angaben
+    p.add_argument("--host", default="0.0.0.0" if os.environ.get("RENDER") else "127.0.0.1")
+    p.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
     p.add_argument("--db", default="goonclient.db")
+    p.add_argument("--codes", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "codes.json"),
+                   help="Datei mit den einlösbaren Codes (Standard: codes.json neben server.py)")
     p.add_argument("--mojang", default="https://sessionserver.mojang.com", help="Basis-URL des Mojang Session-Servers")
     p.add_argument("--insecure", action="store_true", help="Mojang-Prüfung abschalten (NUR für lokale Tests)")
     p.add_argument("--trust-proxy", action="store_true", help="X-Forwarded-For eines Reverse-Proxys für das Rate-Limit nutzen")
     p.add_argument("--verbose", action="store_true")
     args = p.parse_args()
+    if os.environ.get("RENDER") and not args.trust_proxy:
+        # Auf Render kommen alle Anfragen über deren Proxy: ohne X-Forwarded-For teilen sich ALLE Spieler ein Limit
+        # (dann bekommt bei mehreren Spielern jeder "too many requests" und Emotes/Accessoires kommen nicht an)
+        args.trust_proxy = True
     state = State(args)
     httpd = ThreadingHTTPServer((args.host, args.port), make_handler(state))
     httpd.daemon_threads = True
