@@ -450,6 +450,72 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
 - **Server-Routen:** `/` (Seite), `/download` (neueste JAR), `/v1/site` (Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.48.0: Wunschliste, Outfits, Season-Pass und Geschenke
+
+- **Wunschliste:** Im Inventar zeigt der neue Schalter **"Show locked"** auch Items, die dir noch nicht gehören
+  (abgedunkelt, mit Preis und "In shop", wenn sie gerade im Hourly Shop sind). Mit **"Add to wishlist"** markierst du sie
+  (Herz). Taucht ein markiertes Item im Hourly Shop auf, gibt es eine Meldung (oben im Bild und im Chat), einmal pro Stunde.
+- **Outfits:** Oben im Inventar speicherst du deinen aktuellen Look (Cape, Hut, Flügel, Accessoire, Nametag, Badge) unter
+  einem Namen, bis zu 8 Outfits. Anklicken und **"Wear"** zieht alles mit einem Klick an; leere Plätze werden abgelegt,
+  Items, die dir nicht (mehr) gehören, übersprungen. "Save current look" aktualisiert ein Outfit, "Delete" löscht es.
+- **Season-Pass (kostenlos):** Jeden Monat eine neue Season mit **30 Stufen**, zu sehen im Tab "Missions".
+  XP gibt es für aktive Spielzeit (+10 pro Minute), die tägliche Belohnung (+100) und jede abgeholte Mission (+250);
+  alle 500 XP eine Stufe (volle Season etwa 25 Stunden). Jede Stufe gibt Goon Coins: meist 110 bis 290, jede 5. Stufe 500,
+  Stufe 10/20/30 sogar 1000/2000/3000 (zusammen 13.500 pro Season). Leuchtende Stufe anklicken = abholen. Am Monatsende
+  beginnt die nächste Season bei 0, nicht abgeholte Belohnungen verfallen.
+- **Geschenke an Freunde:** In den Stats eines bestätigten Freundes (Friends-Tab, "Stats") gibt es "Send a gift":
+  100, 500, 1000 oder 5000 Goon Coins oder ein Item aus dem aktuellen Hourly Shop, das der Freund noch nicht hat
+  (du zahlst den Preis). Zweiter Klick bestätigt.
+  - Zustellung über den Server, auch wenn der Freund gerade offline ist; er bekommt eine Meldung, sobald er online ist,
+    und du eine, wenn er es erhalten hat.
+  - Ein Server-Neustart kann kein Geschenk verlieren: Dein Client schickt es erneut, bis der Freund es hat, und sein
+    Client schreibt jedes Geschenk nur einmal gut. Hat der Freund das Item inzwischen, bekommt er dessen Preis als Coins.
+  - Beide brauchen 3.48.0. Höchstens 20 Geschenke gleichzeitig unterwegs.
+- Season-Stand, verschickte und empfangene Geschenke sind wie die Coins gegen Bearbeiten der Datei geschützt.
+- Server: neue Routen `/v1/gifts`, `/v1/gifts/send`, `/v1/gifts/claim` (dafür `server.py` hochladen).
+
+## Update 3.47.0: Freunde gehen nicht mehr verloren, Update-Fenster
+
+- **Fix: Freunde verschwanden und mussten neu angefragt werden.** Ursache: Der Server läuft auf Render im Gratis-Plan,
+  dort wird die Datenbank-Datei bei **jedem Neustart gelöscht** (nach jedem Deploy und wenn Render den schlafenden Server
+  wieder aufweckt). Damit waren alle Freundschaften und offenen Anfragen weg.
+- **Jetzt stellt der Client Freundschaften selbst wieder her:** Jeder Client kennt seine Freundesliste lokal. Fehlt ein
+  Freund beim Server, schickt der Client still eine neue Anfrage; kommt eine Anfrage von jemandem, der schon in der
+  eigenen Freundesliste steht, wird sie still angenommen. Sobald beide einmal online waren, seid ihr automatisch wieder
+  Freunde, ohne Klicken und ohne Chat-Meldungen. Fremde Anfragen werden nie automatisch angenommen.
+  - Pro Freund höchstens eine automatische Anfrage pro Spielstart (geht die Freundschaft mitten im Spiel erneut verloren,
+    wird erneut angefragt). Wer einen Freund wirklich loswerden will, entfernt ihn aus der Liste.
+  - Damit es greift, brauchen **beide** Spieler Version 3.47.0. Freundschaften, die schon verloren sind, kommen so auch
+    zurück, solange der Freund noch in der lokalen Liste steht.
+- **Update-Fenster:** Gibt es eine neue Version, erscheint beim Öffnen des GoonClient-Menüs ein Fenster mit Version und
+  den wichtigsten Neuerungen und zwei Knöpfen: **"Jetzt herunterladen"** (lädt und prüft das Update sofort, mit
+  Fortschrittsbalken; installiert wird beim Schließen von Minecraft) und **"Später"** (oder Esc; das Fenster kommt beim
+  nächsten Spielstart wieder). Das gilt ab dem **nächsten** Update nach 3.47.0.
+
+## Update 3.46.0: Event-System, tägliche Belohnung und Missionen
+
+- **Event-System statt fest eingebautem Halloween:** Event-Shops (Name, Start, Ende, Währung, Coins pro Minute, Farbe,
+  Aussehen, Items) kommen jetzt aus `tools/backend/events.json`. Neue Termine, Verlängerungen oder ein neues Event mit
+  schon eingebauten Items brauchen **keine neue Client-Version**: Datei ändern, hochladen, fertig (gilt sofort, ohne
+  Neustart; der Client fragt alle 30 Minuten nach und merkt sich die Liste für Spielen ohne Verbindung).
+  - Mehrere Events gleichzeitig möglich, jedes mit eigenem Tab "<Name> Shop", eigenem Banner im Hourly Shop und eigener,
+    geschützter Währung. Aussehen: `"theme": "halloween"` (Kürbis, Fledermäuse), `"winter"` (Schnee) oder `"default"`.
+  - Zeiten mit Zeitzone angeben, z.B. `"start": "2026-12-20T00:00:00+01:00"`. Ein Event dauert höchstens 62 Tage.
+  - Neue Event-Items selbst (Designs) brauchen weiterhin ein Client-Update; Items, die der Client nicht kennt, ignoriert er.
+  - Das Halloween-Event läuft genau wie bisher (bis 7.11.2026), Halloween Coins und gekaufte Items bleiben erhalten.
+- **Tägliche Belohnung mit Login-Streak:** einmal pro Tag Goon Coins abholen: Tag 1 bis 7 gibt 50, 75, 100, 150, 200,
+  300 und **600** Coins, danach beginnt die Woche von vorn (die Streak zählt weiter). Wer einen Tag auslässt, fängt wieder
+  bei Tag 1 an. Erinnerung beim Betreten einer Welt und ein Banner im Hourly Shop. Uhr zurückstellen bringt nichts.
+- **Missionen und Erfolge:** 23 Ziele mit Coin-Belohnung, z.B. "Warming Up" (1 Stunde spielen, +100), "Collector"
+  (10 Items, +400), "Dance Machine" (100 Emotes, +500), "Full Week" (7 Tage Streak, +500), "Money Printer" (Coin Upgrader
+  voll, +2500), "No Life" (100 Stunden, +4000). Erreichte Missionen werden gemeldet und per Knopf abgeholt ("Claim all").
+  Spielzeit, Käufe, Codes und Upgrades von früher zählen sofort mit.
+- **Neuer Tab "Missions"** mit der Streak-Woche (7 Kacheln, Countdown bis Mitternacht) und allen Missionen mit
+  Fortschrittsbalken; im Titel steht, wie viele Belohnungen bereitliegen.
+- Streak, Emote-Zähler und abgeholte Missionen sind wie die Coins gegen Bearbeiten der Datei geschützt; alte Konten bleiben
+  gültig.
+- Server: neue Route `GET /v1/events` und neue Datei `events.json` (dafür `server.py` und `events.json` hochladen).
+
 ## Update 3.45.0: Limitierter Halloween Shop mit Halloween Coins
 
 - **Neue limitierte Währung "Halloween Coins":** Während des Events gibt es pro Minute aktiver Spielzeit zusätzlich

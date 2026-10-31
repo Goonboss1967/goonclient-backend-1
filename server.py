@@ -39,6 +39,12 @@ Schnittstelle (alles JSON):
   GET  /v1/update                          -> {"version", "file", "size", "sha256", "signature", "minecraft", "title", "notes", "url"}
   GET  /download/goonclient-x.y.z.jar      -> genau diese JAR (für den eingebauten Updater)
                                               (codes = in codes.json als "public" markierte Codes, nicht abgelaufen)
+  Geschenke (alle mit Authorization: Bearer <token>, nur unter bestätigten Freunden):
+  POST /v1/gifts/send   {"id", "to", "coins", "item"} -> {"status": "pending" | "claimed"} (wiederholbar mit derselben Id)
+  GET  /v1/gifts                           -> {"incoming": [{"id","from","fromName","coins","item"}], "sent": {"<id>": claimed}}
+  POST /v1/gifts/claim  {"id"}             -> {"ok": true}, 404 ohne solches Geschenk
+  GET  /v1/events                          -> {"events": [...]} aus events.json (Event-Shops: Termine, Währung, Items;
+                                              ohne Anmeldung, neue Termine ohne neue Client-Version)
 """
 import argparse
 import hashlib
@@ -119,6 +125,10 @@ def clean_cosmetics(raw):
 
 ITEM_RE = re.compile(r"^[a-z]+\.[a-z0-9_]{1,24}$")
 MAX_PENDING_REQUESTS = 200
+MAX_OPEN_GIFTS = 50
+MAX_GIFT_COINS = 10000
+GIFT_ID_RE = re.compile(r"^[0-9a-f]{16,32}$")
+GIFT_ITEM_RE = re.compile(r"^[a-z]+\.[a-z0-9_]{1,32}$")
 MAX_OWNED = 400
 
 
@@ -159,6 +169,9 @@ class Store:
         self.db.execute("CREATE TABLE IF NOT EXISTS friendships (a TEXT NOT NULL, b TEXT NOT NULL, since REAL NOT NULL, "
                         "PRIMARY KEY (a, b))")
         self.db.execute("CREATE TABLE IF NOT EXISTS stats (uuid TEXT PRIMARY KEY, data TEXT NOT NULL, updated REAL NOT NULL)")
+        # Geschenke (ab Client 3.48.0): Id kommt vom Sender, damit er nach einem Datenverlust erneut schicken kann
+        self.db.execute("CREATE TABLE IF NOT EXISTS gifts (id TEXT PRIMARY KEY, src TEXT NOT NULL, dst TEXT NOT NULL, "
+                        "coins INTEGER NOT NULL, item TEXT NOT NULL, at REAL NOT NULL, claimed REAL)")
         self.db.commit()
         self.purge()
 
@@ -254,6 +267,41 @@ class Store:
                 other = b if a == me else a
                 friends.append({"uuid": other, "name": self._name(other), "since": int(since * 1000)})
         return {"incoming": incoming, "outgoing": outgoing, "friends": friends}
+
+    # ---------- Geschenke ----------
+
+    def send_gift(self, src, gid, dst, coins, item):
+        """Legt ein Geschenk an (wiederholbar mit derselben Id). Gibt "pending"/"claimed" zurück, None bei fremder Id."""
+        with self.lock:
+            row = self.db.execute("SELECT src, claimed FROM gifts WHERE id=?", (gid,)).fetchone()
+            if row:
+                return None if row[0] != src else ("claimed" if row[1] else "pending")
+            open_count = self.db.execute("SELECT COUNT(*) FROM gifts WHERE src=? AND claimed IS NULL", (src,)).fetchone()[0]
+            if open_count >= MAX_OPEN_GIFTS:
+                raise RuntimeError("too many open gifts")
+            self.db.execute("INSERT INTO gifts(id, src, dst, coins, item, at, claimed) VALUES(?,?,?,?,?,?,NULL)",
+                            (gid, src, dst, coins, item, time.time()))
+            self.db.commit()
+            return "pending"
+
+    def gifts_overview(self, me):
+        with self.lock:
+            incoming = [{"id": r[0], "from": r[1], "fromName": self._name(r[1]), "coins": r[2], "item": r[3]}
+                        for r in self.db.execute("SELECT id, src, coins, item FROM gifts WHERE dst=? AND claimed IS NULL "
+                                                 "ORDER BY at", (me,)).fetchall()]
+            sent = {r[0]: r[1] is not None for r in self.db.execute(
+                "SELECT id, claimed FROM gifts WHERE src=? AND at > ?", (me, time.time() - 30 * 86400)).fetchall()}
+        return {"incoming": incoming, "sent": sent}
+
+    def claim_gift(self, me, gid):
+        """Empfänger bestätigt ein Geschenk. False, wenn es kein Geschenk an ihn mit dieser Id gibt."""
+        with self.lock:
+            row = self.db.execute("SELECT 1 FROM gifts WHERE id=? AND dst=?", (gid, me)).fetchone()
+            if not row:
+                return False
+            self.db.execute("UPDATE gifts SET claimed=? WHERE id=? AND claimed IS NULL", (time.time(), gid))
+            self.db.commit()
+            return True
 
     def put_stats(self, uid, data):
         with self.lock:
@@ -486,6 +534,96 @@ class Site:
         return entries[:limit], info
 
 
+EVENT_ID_RE = re.compile(r"^[a-z0-9_]{1,24}$")
+EVENT_TEXT_RE = re.compile(r"^[\x20-\x7e]{1,24}$")
+EVENT_ITEM_RE = re.compile(r"^[a-z]+\.[a-z0-9_]{1,32}$")
+EVENT_THEMES = {"halloween", "winter", "default"}
+MAX_EVENT_DAYS = 62
+
+
+def parse_event_time(text):
+    """ISO-Zeit mit Zeitzone, z.B. "2026-10-31T00:00:00+01:00", in Epoch-Millisekunden (sonst None)."""
+    import datetime
+    if not isinstance(text, str):
+        return None
+    try:
+        dt = datetime.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        return None  # ohne Zeitzone wäre der Zeitpunkt je nach Server verschieden
+    return int(dt.timestamp() * 1000)
+
+
+class Events:
+    """
+    Zeitlich begrenzte Event-Shops aus events.json (wie codes.json bei jeder Abfrage auf Änderungen geprüft). Eintrag:
+    {"id": "halloween2026", "name": "Halloween", "currency": "halloween", "currencyName": "Halloween Coins",
+     "start": "2026-10-31T00:00:00+01:00", "end": "2026-11-07T00:00:00+01:00", "endLabel": "Nov 7, 2026",
+     "coinsPerMinute": 3, "color": "#FF7A1A", "theme": "halloween", "items": ["hat.jackolantern", ...]}
+    Items müssen im Client als limitierte Items eingebaut sein; unbekannte Ids ignoriert der Client.
+    """
+
+    def __init__(self, path):
+        self.path = path
+        self.lock = threading.Lock()
+        self.mtime = None
+        self.events = []
+
+    def _reload(self):
+        try:
+            mtime = os.path.getmtime(self.path)
+        except OSError:
+            self.events, self.mtime = [], None
+            return
+        if mtime == self.mtime:
+            return
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                raw = json.load(f)
+        except (OSError, ValueError) as e:
+            print("events.json could not be read: %s" % e)
+            return  # alte Liste behalten
+        out = []
+        for e in raw.get("events", []) if isinstance(raw, dict) else []:
+            clean = clean_event(e)
+            if clean is None:
+                print("events.json: invalid entry skipped: %r" % (e,))
+            elif all(x["id"] != clean["id"] for x in out):
+                out.append(clean)
+        self.events, self.mtime = out[:8], mtime
+
+    def all(self):
+        with self.lock:
+            self._reload()
+            return list(self.events)
+
+
+def clean_event(e):
+    if not isinstance(e, dict):
+        return None
+    eid, cur = e.get("id"), e.get("currency")
+    name, cur_name = e.get("name"), e.get("currencyName")
+    if not (isinstance(eid, str) and EVENT_ID_RE.match(eid) and isinstance(cur, str) and EVENT_ID_RE.match(cur)
+            and isinstance(name, str) and EVENT_TEXT_RE.match(name) and isinstance(cur_name, str) and EVENT_TEXT_RE.match(cur_name)):
+        return None
+    start, end = parse_event_time(e.get("start")), parse_event_time(e.get("end"))
+    if start is None or end is None or end <= start or end - start > MAX_EVENT_DAYS * 86400 * 1000:
+        return None
+    cpm = e.get("coinsPerMinute", 3)
+    if not isinstance(cpm, int) or isinstance(cpm, bool) or not 1 <= cpm <= 20:
+        return None
+    items = [i for i in e.get("items", []) if isinstance(i, str) and EVENT_ITEM_RE.match(i)] \
+        if isinstance(e.get("items"), list) else []
+    if not items:
+        return None
+    color = e.get("color") if isinstance(e.get("color"), str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", e.get("color")) else "#FF7A1A"
+    label = e.get("endLabel") if isinstance(e.get("endLabel"), str) and EVENT_TEXT_RE.match(e.get("endLabel")) else ""
+    theme = e.get("theme") if e.get("theme") in EVENT_THEMES else "default"
+    return {"id": eid, "name": name, "currency": cur, "currencyName": cur_name, "startMs": start, "endMs": end,
+            "endLabel": label, "coinsPerMinute": cpm, "color": color, "theme": theme, "items": list(dict.fromkeys(items))[:64]}
+
+
 def code_expired(entry):
     exp = entry.get("expires")
     if not exp:
@@ -563,6 +701,7 @@ class State:
         self.limiter = RateLimiter()
         self.emotes = Emotes()
         self.codes = Codes(args.codes)
+        self.events = Events(args.events)
         self.site = Site(args.site)
         self.lock = threading.Lock()
         self.challenges = {}   # serverId -> Ablaufzeit
@@ -697,6 +836,11 @@ def make_handler(state):
                 else:
                     self.send_json(200, info)
                 return True
+            if path == "/v1/events":
+                if not self.guard("events", 60):
+                    return True
+                self.send_json(200, {"events": state.events.all()})
+                return True
             if path == "/v1/site":
                 if not self.guard("site", 120):
                     return True
@@ -771,6 +915,13 @@ def make_handler(state):
                     if len(uids) > MAX_UUIDS:
                         return self.error(400, "too many uuids (max %d)" % MAX_UUIDS)
                     return self.send_json(200, {"players": state.emotes.get_many(list(dict.fromkeys(uids)))})
+                if parsed.path == "/v1/gifts":
+                    if not self.guard("friends", 240):
+                        return
+                    uid = state.uuid_for(self.bearer())
+                    if uid is None:
+                        return self.error(401, "not logged in")
+                    return self.send_json(200, state.store.gifts_overview(uid))
                 if parsed.path in ("/v1/friends", "/v1/friends/profile"):
                     if not self.guard("friends", 240):
                         return
@@ -792,8 +943,9 @@ def make_handler(state):
             is_emote = parsed.path == "/v1/emote"
             is_redeem = parsed.path in ("/v1/redeem", "/v1/redeem/code")
             is_friends = parsed.path.startswith("/v1/friends/")
+            is_gift = parsed.path in ("/v1/gifts/send", "/v1/gifts/claim")
             group, limit = ("emote", 60) if is_emote else ("redeem", 20) if is_redeem \
-                else ("friends_write", 60) if is_friends else ("auth", 30)
+                else ("friends_write", 60) if is_friends else ("gifts", 120) if is_gift else ("auth", 30)
             if not self.guard(group, limit):
                 return
             try:
@@ -816,6 +968,30 @@ def make_handler(state):
                         state.store.remove_friend(uid, other)
                         return self.send_json(200, {"status": "removed"})
                     return self.error(404, "not found")
+                if is_gift:
+                    uid = state.uuid_for(self.bearer())
+                    if uid is None:
+                        return self.error(401, "not logged in")
+                    gid = body.get("id")
+                    if not isinstance(gid, str) or not GIFT_ID_RE.match(gid):
+                        return self.error(400, "bad gift id")
+                    if parsed.path == "/v1/gifts/claim":
+                        if not state.store.claim_gift(uid, gid):
+                            return self.error(404, "no such gift")
+                        return self.send_json(200, {"ok": True})
+                    to = norm_uuid(body.get("to", ""))
+                    coins, item = body.get("coins", 0), body.get("item", "")
+                    if to == uid:
+                        return self.error(400, "that is you")
+                    if not isinstance(coins, int) or isinstance(coins, bool) or not 0 <= coins <= MAX_GIFT_COINS \
+                            or not isinstance(item, str) or (item and not GIFT_ITEM_RE.match(item)) or (coins > 0) == bool(item):
+                        return self.error(400, "bad gift")
+                    if not state.store.are_friends(uid, to):
+                        return self.error(403, "only friends can get gifts")
+                    status = state.store.send_gift(uid, gid, to, coins, item)
+                    if status is None:
+                        return self.error(409, "gift id already used")
+                    return self.send_json(200, {"status": status})
                 if parsed.path == "/v1/redeem/code":
                     # Neuer Weg (ab Client 3.10.0): der Spieler schickt den eingetippten Code, das Backend prüft ihn
                     uid = state.uuid_for(self.bearer())
@@ -902,6 +1078,8 @@ def main():
     p.add_argument("--db", default="goonclient.db")
     p.add_argument("--codes", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "codes.json"),
                    help="Datei mit den einlösbaren Codes (Standard: codes.json neben server.py)")
+    p.add_argument("--events", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "events.json"),
+                   help="Datei mit den Event-Shops (Standard: events.json neben server.py)")
     p.add_argument("--site", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "site"),
                    help="Ordner der Website (Standard: site/ neben server.py)")
     p.add_argument("--mojang", default="https://sessionserver.mojang.com", help="Basis-URL des Mojang Session-Servers")
