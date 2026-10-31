@@ -640,7 +640,9 @@ EMOTE_IDS = {"wave", "dance", "flex", "dab", "salute", "spin", "orangejustice", 
              # 3.44.0
              "thumbsup", "point", "shrug", "clap", "think", "facepalm", "bow", "cheer",
              # 3.45.0 (Halloween, limitiert)
-             "zombie", "boo"}
+             "zombie", "boo",
+             # 3.49.0 (Season-Pass, limitiert)
+             "robot"}
 EMOTE_TTL = 8.0  # so lange bleibt ein Emote abrufbar (Sekunden)
 
 

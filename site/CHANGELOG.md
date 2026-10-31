@@ -450,6 +450,28 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
 - **Server-Routen:** `/` (Seite), `/download` (neueste JAR), `/v1/site` (Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.49.0: Free und Premium Season-Pass mit limitierten Season-Cosmetics
+
+- **Zwei Tracks:** Jede der 30 Stufen hat jetzt eine **Free**-Belohnung (obere Reihe) und eine **Premium**-Belohnung
+  (untere Reihe, mit Goldrand). Den **Premium-Pass** kauft man im Season-Pass für **1000 Goon Coins** pro Season
+  (zweiter Klick bestätigt). Schon erreichte Stufen können danach sofort auch premium abgeholt werden; XP und
+  Free-Belohnungen bleiben. Mit der nächsten Season läuft Premium ab, gewonnene Items bleiben für immer.
+- **Premium gibt mehr:** mehr Cosmetics (5 statt 2) und mehr Coins (Premium-Coins: 165 bis 585 pro Stufe,
+  Stufe 10/20 sogar 1500/3000, zusammen gut 13.000 extra).
+- **Limitierte Season-Cosmetics "Neon Nights" (Season November 2026),** nur im Season-Pass, nie im Shop, nicht
+  verschenkbar:
+  - Free: **Volt** Badge (Stufe 8, flackerndes Neon-Schild "⚡VOLT"), **Circuit** Nametag (Stufe 20, Datenpakete rasen
+    durch den Namen).
+  - Premium: **Robot** Emote (Stufe 6), **Data Cubes** (Stufe 12, vier leuchtende Würfel kreisen um den Kopf),
+    **Cyber Helmet** (Stufe 18, Helm mit Cyan-Visier und Antenne), **Circuit Wings** (Stufe 24, Platinen mit leuchtenden
+    Leiterbahnen), **Synthwave** Cape (Stufe 30, Legendary, animiert: gestreifte Sonne über einem Neon-Gitter).
+  - Unter den Stufen zeigt der Season-Pass alle Season-Cosmetics mit Vorschau; im Inventar steht bei ihnen, aus welcher
+    Season und Stufe sie stammen.
+- Seasons ohne eigene Cosmetics geben auf diesen Stufen Coins. Neue Season-Cosmetics für spätere Monate brauchen ein
+  Client-Update (die Designs sind eingebaut).
+- Premium-Stand und Premium-Belohnungen sind wie die Coins gegen Bearbeiten der Datei geschützt.
+- Server: das neue Emote "Robot" ist freigeschaltet (dafür `server.py` hochladen).
+
 ## Update 3.48.0: Wunschliste, Outfits, Season-Pass und Geschenke
 
 - **Wunschliste:** Im Inventar zeigt der neue Schalter **"Show locked"** auch Items, die dir noch nicht gehören
