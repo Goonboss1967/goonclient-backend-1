@@ -450,6 +450,22 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
 - **Server-Routen:** `/` (Seite), `/download` (neueste JAR), `/v1/site` (Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.43.0: Halloween-Theme und ruhigeres Menü-Design
+
+- **Neues Theme "Halloween"** (Goon Cosmetics → Themes, mit "SEASONAL"-Markierung):
+  - Kürbis-Orange auf Nacht-Lila; das Logo wird zum geschnitzten Kürbis (Seitenleiste und Startseite).
+  - Fledermäuse flattern durchs Menü, oben rechts hängt ein Spinnennetz und in der Titelzeile baumelt eine Spinne.
+  - Die schwebenden Partikel werden zu aufsteigender Glut in Orange und Lila.
+  - Auf der Startseite: "Happy Halloween! Trick or treat." und eine kleine Fledermaus.
+- **Cleaneres, weicheres Menü:**
+  - Weicher Schatten unter dem Fenster und ein feiner Rand statt der harten Akzent-Kante; die Leuchtlinie oben läuft zu den
+    Ecken hin aus.
+  - Hintergrund mit sanftem Verlauf statt flacher Abdunklung.
+  - Seitenleiste mit kleinen Gruppen-Überschriften ("MODULES", "CLIENT") und einer feinen Kante zum Inhalt; bei kleinen
+    Fenstern rückt sie automatisch enger zusammen, damit alle Tabs sichtbar bleiben.
+  - Feine Trennlinie unter der Titelzeile, weicherer Seitenwechsel (Ease-out).
+  - Theme-Karten heben sich beim Hovern leicht an.
+
 ## Update 3.42.0: Automatische Updates
 
 - **Eingebauter Updater:** Ab dieser Version muss man die JAR nicht mehr für jedes Update neu herunterladen.
