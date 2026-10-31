@@ -33,6 +33,13 @@
       "expires": "2026-11-06",
       "public": true,
       "code": "GOON-HALLOWEEN-2026"
+    },
+    {
+      "id": "sorry1500",
+      "hash": "fb1fcab891f8ea25fc865ce9c4d5f74068ef57fb4730b2c76cc01ef34ebd227a",
+      "coins": 1500,
+      "public": true,
+      "code": "GOON-SORRY-1500"
     }
   ]
 }

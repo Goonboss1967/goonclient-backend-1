@@ -434,8 +434,13 @@ Alle stehenden Emotes atmen leicht; Übergänge laufen mit weichem Ein- und Auss
 
 Die Website läuft auf demselben Render-Server wie das Backend: **https://goonclient-backend-1.onrender.com/**
 
-- **Inhalt:** Download der neuesten Version, alle Funktionen, die Redeem-Codes zum Kopieren und die Updates (direkt aus diesem
-  Changelog), dazu eine Installationsanleitung. Die Seite funktioniert auch auf dem Handy.
+- **Inhalt:** Download der neuesten Version, Überblick, **jedes Modul im Detail** (Reiter Render & PvP, HUD, Utility, Gadgets,
+  Menü & Client), ein eigener Abschnitt für den **Pack Mixer** (Anleitung, Funktionen, alle Abteile), **Shop & Pass**
+  (Goon Coins, Battle Pass, tägliche Belohnung, Missionen, Hourly Shop, Event-Shops, Wunschliste, Outfits), **Freunde**
+  (Anfragen, Stats, Geschenke, Emotes, Cosmetics-Sync), die Redeem-Codes zum Kopieren, die Updates (direkt aus diesem
+  Changelog), Installation und FAQ. Die Seite funktioniert auch auf dem Handy (Menü-Knopf statt Navigationsleiste).
+- **Neue Client-Funktion auf der Website ergänzen:** in `index.html` im Skript die Listen `OVERVIEW`, `MODULES` bzw. die
+  Karten in `economy-grid` / `social-grid` erweitern. Codes, Updates, Version und Download kommen automatisch vom Server.
 - **Dateien:** `tools/backend/site/`
   - `index.html` – die Seite.
   - `downloads/goonclient-x.y.z.jar` – die JAR für den Download-Knopf.
@@ -449,6 +454,11 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
 - **Funktionsliste:** steht oben im Skript von `index.html` (`FEATURES`). Bei großen neuen Funktionen dort eine Zeile ergänzen.
 - **Server-Routen:** `/` (Seite), `/download` (neueste JAR), `/v1/site` (Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
+
+## Update 3.51.0: Theme "Monochrome"
+
+- **Neues Theme "Monochrome"** (Goon Cosmetics → Themes): Schwarz, Grau und Weiß ohne Farbakzent, passend zur Website.
+  Hintergrund fast schwarz, Flächen in dunklem Grau, Auswahl und Hervorhebungen in hellem Grau/Weiß.
 
 ## Update 3.50.1: Update-Fenster kommt zuverlässig
 
