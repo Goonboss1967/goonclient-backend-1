@@ -455,10 +455,18 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
 - **Server-Routen:** `/` (Seite), `/download` (neueste JAR), `/v1/site` (Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.51.1: Item Scale nur für Items auf dem Boden
+
+- **Fix:** Eine eigene Größe für den End-Kristall in der Item-Liste von **Item Scale** hat auch **platzierte** End-Kristalle
+  (die Entity) riesig gemacht. Die Item-Liste gilt jetzt nur noch für **gedroppte Items** auf dem Boden; platzierte
+  Kristalle, Blöcke und andere Entities bleiben normal groß. In der Liste steht das als Hinweis unter dem Regler.
+
 ## Update 3.51.0: Theme "Monochrome"
 
 - **Neues Theme "Monochrome"** (Goon Cosmetics → Themes): Schwarz, Grau und Weiß ohne Farbakzent, passend zur Website.
   Hintergrund fast schwarz, Flächen in dunklem Grau, Auswahl und Hervorhebungen in hellem Grau/Weiß.
+- Auf dem hellen Akzent werden Schalter-Knöpfe und das "G" im Logo automatisch dunkel gezeichnet, damit sie sichtbar
+  bleiben (die anderen Themes sehen aus wie bisher).
 
 ## Update 3.50.1: Update-Fenster kommt zuverlässig
 
