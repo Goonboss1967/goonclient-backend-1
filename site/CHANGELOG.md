@@ -450,6 +450,29 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
 - **Server-Routen:** `/` (Seite), `/download` (neueste JAR), `/v1/site` (Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.50.0: Battle Pass mit eigenem Tab und seitlich scrollender Leiste
+
+- **Battle Pass statt Monats-Season-Pass:** Die Season wechselt nicht mehr automatisch jeden Monat, sondern läuft, bis
+  eine neue Season eingebaut wird (kein Enddatum). Aktuell: **Season 1: Neon Nights** mit allen 7 limitierten Cosmetics
+  (Volt, Circuit, Robot, Data Cubes, Cyber Helmet, Circuit Wings, Synthwave). Free- und Premium-Track (1000 Coins)
+  bleiben wie in 3.49.
+- **Eigener Tab "Battle Pass"** in der Seitenleiste, unter dem Event-Shop und über "Missions" (dort ist der Pass nicht
+  mehr).
+- **Seitlich scrollende Leiste statt Tabelle:** Alle 30 Stufen nebeneinander, oben die Free-Belohnung, unten die
+  Premium-Belohnung, dazwischen die Stufen-Leiste mit dem Fortschritt. Items mit Live-Vorschau, Coins mit Münze.
+  Scrollen mit dem Mausrad, den Pfeilen oder der Leiste darunter; beim Öffnen springt sie zur aktuellen Stufe.
+  Abholbare Belohnungen leuchten ("CLAIM"), Klick = abholen. Unten zeigt ein Detailbereich die angeklickte Belohnung groß.
+- Wer im alten Monats-Pass schon XP oder Premium hatte, behält beides in Season 1; Stufen, die jetzt ein Item geben,
+  können noch einmal abgeholt werden.
+- Neue Season: Bescheid sagen, dann wird sie mit neuen Cosmetics als Season 2 eingebaut (Client-Update).
+
+## Update 3.49.1: Season-Pass zeigt die nächste Season
+
+- Hat die laufende Season keine eigenen Cosmetics (z.B. Oktober 2026), zeigt der Season-Pass unten die Cosmetics der
+  **nächsten** Season als Vorschau ("Coming next season: November 2026 - Neon Nights", Karten mit "Soon").
+- In den **letzten 24 Stunden** einer Season kann man Premium nicht mehr kaufen ("Premium closed"), damit niemand
+  1000 Coins für ein paar Stunden Premium bezahlt. Premium der neuen Season gibt es ab ihrem Start.
+
 ## Update 3.49.0: Free und Premium Season-Pass mit limitierten Season-Cosmetics
 
 - **Zwei Tracks:** Jede der 30 Stufen hat jetzt eine **Free**-Belohnung (obere Reihe) und eine **Premium**-Belohnung
