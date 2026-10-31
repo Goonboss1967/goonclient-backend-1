@@ -10,9 +10,7 @@
     {
       "id": "bonus3000",
       "hash": "45c00347cc35b8e6880fe3ec4ace5e74994351e42c1050838335abd20edd7851",
-      "coins": 3000,
-      "public": true,
-      "code": "GOON-3PCM-YPJY"
+      "coins": 3000
     },
     {
       "id": "hourly1000",
