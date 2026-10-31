@@ -450,6 +450,42 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
 - **Server-Routen:** `/` (Seite), `/download` (neueste JAR), `/v1/site` (Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.43.0: Halloween-Theme und ruhigeres Menü-Design
+
+- **Neues Theme "Halloween"** (Goon Cosmetics → Themes, mit "SEASONAL"-Markierung):
+  - Kürbis-Orange auf Nacht-Lila; das Logo wird zum geschnitzten Kürbis (Seitenleiste und Startseite).
+  - Fledermäuse flattern durchs Menü, oben rechts hängt ein Spinnennetz und in der Titelzeile baumelt eine Spinne.
+  - Die schwebenden Partikel werden zu aufsteigender Glut in Orange und Lila.
+  - Auf der Startseite: "Happy Halloween! Trick or treat." und eine kleine Fledermaus.
+- **Cleaneres, weicheres Menü:**
+  - Weicher Schatten unter dem Fenster und ein feiner Rand statt der harten Akzent-Kante; die Leuchtlinie oben läuft zu den
+    Ecken hin aus.
+  - Hintergrund mit sanftem Verlauf statt flacher Abdunklung.
+  - Seitenleiste mit kleinen Gruppen-Überschriften ("MODULES", "CLIENT") und einer feinen Kante zum Inhalt; bei kleinen
+    Fenstern rückt sie automatisch enger zusammen, damit alle Tabs sichtbar bleiben.
+  - Feine Trennlinie unter der Titelzeile, weicherer Seitenwechsel (Ease-out).
+  - Theme-Karten heben sich beim Hovern leicht an.
+
+## Update 3.42.0: Automatische Updates
+
+- **Eingebauter Updater:** Ab dieser Version muss man die JAR nicht mehr für jedes Update neu herunterladen.
+  - Beim Start schaut der Client auf dem GoonClient-Server nach einer neuen Version (danach alle 3 Stunden).
+  - Gibt es eine, erscheint eine kleine Meldung und oben auf der Home-Seite ein Hinweis mit **"Install"** und **"Later"**.
+    Installiert wird **nur nach Klick**.
+  - Die neue JAR wird im Hintergrund geladen und geprüft: Größe, SHA-256-Prüfsumme und eine digitale **Signatur**. Nur
+    Updates, die wirklich vom GoonClient-Entwickler signiert sind, werden installiert.
+  - Beim **Schließen von Minecraft** tauscht ein kleiner Helfer die alte JAR gegen die neue; beim nächsten Start läuft die
+    neue Version.
+  - Klappt der automatische Austausch einmal nicht, zeigt der Client das an, und **"Open folders"** öffnet den Update-Ordner
+    und den Mods-Ordner zum Austauschen von Hand.
+  - Braucht ein Update eine andere Minecraft-Version, wird es nicht installiert; dann gibt es den Hinweis auf die Website.
+- **Settings:** neuer Schalter "Check for updates" und ein Abschnitt **Updates** mit Status, "Check now" und "Install update".
+- Diese Version muss **noch einmal von Hand** installiert werden; ab dann kommen Updates automatisch.
+
+> **Für den Entwickler:** Der Build signiert jede JAR mit `~/.goonclient/update-signing.key` (liegt nur auf deinem PC).
+> **Diese Datei sichern!** Ohne sie können keine automatischen Updates mehr veröffentlicht werden. Beim Hochladen der Website
+> immer den ganzen `site`-Ordner hochladen, auch die `.sig`-Datei in `site/downloads`.
+
 ## Update 3.41.0: Armor Durability Overlay und Totem Tweaks
 
 Zwei neue Module (Kategorie **Render**):

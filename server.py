@@ -36,6 +36,8 @@ Schnittstelle (alles JSON):
   GET  /                                   -> die Website (site/index.html)
   GET  /download                           -> die neueste Client-JAR aus site/downloads/
   GET  /v1/site                            -> {"version", "file", "size", "updates": [...], "info", "codes": [...]}
+  GET  /v1/update                          -> {"version", "file", "size", "sha256", "signature", "minecraft", "title", "notes", "url"}
+  GET  /download/goonclient-x.y.z.jar      -> genau diese JAR (für den eingebauten Updater)
                                               (codes = in codes.json als "public" markierte Codes, nicht abgelaufen)
 """
 import argparse
@@ -411,6 +413,50 @@ class Site:
     def jar_bytes(self, name):
         return self._read(os.path.join(self.folder, "downloads", name))
 
+    def jar_sha256(self, name):
+        """SHA-256 (hex) einer JAR; wird pro Datei-Inhalt nur einmal berechnet."""
+        data = self.jar_bytes(name)
+        if data is None:
+            return None
+        key = ("sha", name, len(data), id(data))
+        with self.lock:
+            hit = self.cache.get(key)
+        if hit is None:
+            hit = hashlib.sha256(data).hexdigest()
+            with self.lock:
+                self.cache[key] = hit
+        return hit
+
+    def jar_signature(self, name):
+        """Ed25519-Signatur (Base64) aus goonclient-x.y.z.jar.sig, die der Gradle-Build anlegt, oder None."""
+        raw = self._read(os.path.join(self.folder, "downloads", name + ".sig"))
+        if not raw:
+            return None
+        sig = raw.decode("ascii", "replace").strip()
+        return sig if re.match(r"^[A-Za-z0-9+/=]{40,200}$", sig) else None
+
+    def update_info(self):
+        """Antwort für /v1/update: was der eingebaute Updater des Clients braucht."""
+        name, version = self.latest_jar()
+        if not name:
+            return None
+        data = self.jar_bytes(name)
+        if data is None:
+            return None
+        updates, info = self.changelog(limit=1)
+        latest = updates[0] if updates and updates[0]["version"] == version else None
+        return {
+            "version": version,
+            "file": name,
+            "size": len(data),
+            "sha256": self.jar_sha256(name),
+            "signature": self.jar_signature(name),
+            "minecraft": info.get("minecraft"),
+            "title": latest["title"] if latest else "",
+            "notes": (latest["body"] if latest else "")[:4000],
+            "url": "/download/" + name,
+        }
+
     def changelog(self, limit=40):
         """Die "## Update x.y.z: Titel"-Abschnitte aus CHANGELOG.md, neueste zuerst."""
         raw = self._read(os.path.join(self.folder, "CHANGELOG.md"))
@@ -625,6 +671,27 @@ def make_handler(state):
                 else:
                     self.send_bytes(data, "application/java-archive",
                                     {"Content-Disposition": 'attachment; filename="%s"' % name, "Cache-Control": "no-cache"})
+                return True
+            if path.startswith("/download/"):
+                # genau diese Datei (der Updater lädt die Version, deren Prüfsumme er bekommen hat)
+                if not self.guard("download", 30):
+                    return True
+                name = path[len("/download/"):]
+                data = state.site.jar_bytes(name) if Site.JAR_RE.match(name) else None
+                if data is None:
+                    self.error(404, "no such client build")
+                else:
+                    self.send_bytes(data, "application/java-archive",
+                                    {"Content-Disposition": 'attachment; filename="%s"' % name, "Cache-Control": "no-cache"})
+                return True
+            if path == "/v1/update":
+                if not self.guard("update", 60):
+                    return True
+                info = state.site.update_info()
+                if info is None:
+                    self.error(404, "no client build available yet")
+                else:
+                    self.send_json(200, info)
                 return True
             if path == "/v1/site":
                 if not self.guard("site", 120):
