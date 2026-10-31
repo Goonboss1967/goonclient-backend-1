@@ -455,6 +455,29 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
 - **Server-Routen:** `/` (Seite), `/download` (neueste JAR), `/v1/site` (Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.52.0: Daily Missions und 8 Items im Hourly Shop
+
+- **Daily Missions** (Tab "Missions", zwischen täglicher Belohnung und den Missionen): jeden Tag **3 neue Aufgaben**,
+  für alle Spieler gleich, z.B. "Play for 30 minutes today", "Play 3 emotes today", "Buy an item in the Hourly Shop",
+  "Claim your daily reward", "Earn 100 coins by playing today" oder "Claim a Battle Pass reward". Nie zwei Aufgaben
+  derselben Art an einem Tag.
+  - Jede Aufgabe gibt beim Abholen **Goon Coins (50–300) und Battle-Pass-XP (100–400)**.
+  - Fortschrittsbalken, "Claim"-Knopf und Countdown bis zu den neuen Aufgaben um Mitternacht. Erledigte Aufgaben werden
+    im Spiel gemeldet. Der Fortschritt zählt nur für den jeweiligen Tag.
+  - Wie die Coins gegen Bearbeiten der Datei geschützt.
+- **Missionen geben Battle-Pass-XP:** wie bisher +250 XP pro abgeholter Mission; das steht jetzt auch in der Liste und in
+  der Meldung beim Abholen.
+- **Hourly Shop: 8 statt 5 Items pro Stunde.** In breiten Fenstern alle in einer Reihe, sonst in zwei Reihen zu 4.
+
+## Update 3.51.2: Pack Mixer – Varianten scrollen
+
+- **Fix:** Mit vielen Texture Packs verschwanden im Pack Mixer Varianten: Der Inspector zeigte nur so viele Kacheln, wie
+  unten Platz hatten; alle weiteren Packs waren nicht erreichbar. Außerdem wurde die große Vorschau mit jeder Zeile kleiner.
+- Die Varianten-Kacheln im Inspector lassen sich jetzt mit dem **Mausrad scrollen** (rechts zeigt eine schmale Leiste die
+  Position, unten steht z.B. "30 packs - scroll for more"). Die große Vorschau bleibt dabei groß. Beim Wechsel zu einem
+  anderen Teil beginnt die Liste wieder oben.
+- Geprüft im Spiel mit 30 Packs, die alle das Diamantschwert ändern: alle 31 Varianten (Vanilla + 30) sind erreichbar.
+
 ## Update 3.51.1: Item Scale nur für Items auf dem Boden
 
 - **Fix:** Eine eigene Größe für den End-Kristall in der Item-Liste von **Item Scale** hat auch **platzierte** End-Kristalle
