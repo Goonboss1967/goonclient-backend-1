@@ -450,6 +450,16 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
 - **Server-Routen:** `/` (Seite), `/download` (neueste JAR), `/v1/site` (Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.50.1: Update-Fenster kommt zuverlässig
+
+- **Fix:** Das Update-Fenster ("Neues Update verfügbar!" mit "Jetzt herunterladen" / "Später") kam oft nicht. Ursache:
+  Der Client fragte nur einmal beim Spielstart nach einem Update. Schlug diese Abfrage fehl (z.B. weil der Server auf
+  Render gerade aufwacht oder neu deployt wird), wurde erst nach 3 Stunden wieder gefragt. Außerdem prüfte das Fenster
+  nur im allerersten Moment beim Öffnen des Menüs.
+- Jetzt fragt der Client **bei jedem Öffnen des GoonClient-Menüs** (Öffnungstaste) nach einem Update (höchstens alle
+  30 Sekunden), nach einem Fehler außerdem automatisch alle 2 Minuten. Kommt die Antwort erst, während das Menü schon
+  offen ist, erscheint das Fenster sofort. "Später" blendet es bis zum nächsten Spielstart aus.
+
 ## Update 3.50.0: Battle Pass mit eigenem Tab und seitlich scrollender Leiste
 
 - **Battle Pass statt Monats-Season-Pass:** Die Season wechselt nicht mehr automatisch jeden Monat, sondern läuft, bis
