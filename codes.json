@@ -18,6 +18,13 @@
       "coins": 1000,
       "public": true,
       "code": "GOON-HOURLY-1000"
+    },
+    {
+      "id": "upgrade1250",
+      "hash": "b288bcb80a527109f19b3d96c1f3c27a7813f17d4c1525627821874f167a5919",
+      "coins": 1250,
+      "public": true,
+      "code": "GOON-UPGRADE-1250"
     }
   ]
 }
