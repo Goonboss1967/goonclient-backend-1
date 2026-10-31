@@ -450,6 +450,14 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
 - **Server-Routen:** `/` (Seite), `/download` (neueste JAR), `/v1/site` (Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.43.1: HUD-Editor ohne Unschärfe
+
+- **Fix:** Im HUD-Editor ("Move HUD elements") war alles weichgezeichnet, auch die Elemente, die man verschiebt. Jetzt bleibt
+  alles scharf und in echter Farbe, ohne Abdunklung.
+- Die Prozent-Angaben an den Elementen und das Kreuz über den ganzen Bildschirm sind weg. Beim Element unter der Maus
+  stehen nur noch sein Name und eine leichte Hervorhebung.
+- Der Hinweis zur Bedienung ist eine kleine Leiste oben in der Mitte, die nach ein paar Sekunden ausblendet.
+
 ## Update 3.43.0: Halloween-Theme und ruhigeres Menü-Design
 
 - **Neues Theme "Halloween"** (Goon Cosmetics → Themes, mit "SEASONAL"-Markierung):
