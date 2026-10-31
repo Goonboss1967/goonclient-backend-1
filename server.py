@@ -498,7 +498,9 @@ def code_expired(entry):
 
 # Alte Ids (laugh, heart, cry, celebrate) bleiben erlaubt, damit ältere Clients nicht abgewiesen werden
 EMOTE_IDS = {"wave", "dance", "flex", "dab", "salute", "spin", "orangejustice", "levitate",
-             "laugh", "heart", "cry", "celebrate"}
+             "laugh", "heart", "cry", "celebrate",
+             # 3.44.0
+             "thumbsup", "point", "shrug", "clap", "think", "facepalm", "bow", "cheer"}
 EMOTE_TTL = 8.0  # so lange bleibt ein Emote abrufbar (Sekunden)
 
 

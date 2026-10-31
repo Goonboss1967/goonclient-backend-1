@@ -450,6 +450,22 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
 - **Server-Routen:** `/` (Seite), `/download` (neueste JAR), `/v1/site` (Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.44.0: 49 neue Shop-Items
+
+- **8 neue Emotes** (schlicht und sauber animiert): Thumbs Up, Point, Shrug, Clap, Think, Facepalm, Bow, Cheer.
+- **9 neue Capes:** Ash, Mint, Cherry, Toxic, Pumpkin, Glacier, dazu animiert Storm (Blitze), Lava und Nebula (Legendary).
+- **10 neue Badges:** Check ✔, Music ♫, Snow ❄, Anchor ⚓, Peace ☮, Sword ⚔ und Infinity ∞ (pulsierend), Atom ⚛ und
+  Comet ☄ (schimmernd), Galaxy ✺ (Regenbogen).
+- **6 neue Nametags:** Candy (rollende Zuckerstangen-Streifen), Ocean (Wellen mit Schaum), Sunset, Matrix (flackernder Code),
+  Lava (glühende Risse) und Hologram (Legendary, Scan-Licht).
+- **6 neue Hüte:** Headband, Party Hat, Santa Hat, Witch Hat, Propeller Cap (der Propeller dreht sich) und Star Crown
+  (Legendary, Regenbogen-Sterne kreisen um die Krone).
+- **3 neue Flügel:** Butterfly Wings, Shadow Wings (violett leuchtende Kanten), Ice Wings (leuchtende Eiskristalle).
+- **7 neue Accessoires:** Mustache, Bow Tie, Monocle, Bandana, Flower Crown, Spirit Wisps (schwebende Geister-Lichter) und
+  Golden Aura (Legendary, ein Ring aus goldenem Licht).
+- Alle neuen Items kommen ganz normal in den Hourly Shop (Seltenheit bestimmt, wie oft sie auftauchen).
+- Server: die neuen Emotes sind freigeschaltet, damit andere Spieler sie sehen (dafür `server.py` neu hochladen).
+
 ## Update 3.43.1: HUD-Editor ohne Unschärfe
 
 - **Fix:** Im HUD-Editor ("Move HUD elements") war alles weichgezeichnet, auch die Elemente, die man verschiebt. Jetzt bleibt
