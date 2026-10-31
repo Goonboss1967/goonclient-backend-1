@@ -4,87 +4,230 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GoonClient</title>
-<meta name="description" content="GoonClient – der Fabric-Client für Minecraft 1.21.11: PvP-Module, Hourly Shop, Cosmetics, Emotes, Pack Mixer. Kostenlos herunterladen.">
+<meta name="description" content="GoonClient – der kostenlose Fabric-Client für Minecraft 1.21.11: PvP- und HUD-Module, Pack Mixer, Hourly Shop, Battle Pass, Cosmetics, Emotes und Freunde.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%238b5cf6'/%3E%3Cpath d='M44 22H26v20h14v-8h-7' stroke='white' stroke-width='6' fill='none' stroke-linecap='square'/%3E%3C/svg%3E">
 <style>
   :root {
-    --bg: #0b0b12;
-    --panel: #12121c;
-    --panel-2: #1a1a28;
+    --bg: #09090f;
+    --bg-2: #0e0e17;
+    --panel: #13131e;
+    --panel-2: #1b1b2a;
+    --panel-3: #23233a;
     --line: rgba(255, 255, 255, .07);
-    --text: #ececf4;
-    --dim: #9a9ab0;
+    --line-2: rgba(255, 255, 255, .12);
+    --text: #ededf5;
+    --dim: #9c9cb4;
+    --faint: #6b6b85;
     --accent: #8b5cf6;
     --accent-2: #a78bfa;
+    --pink: #f472b6;
+    --cyan: #22d3ee;
     --gold: #fbbf24;
     --green: #4ade80;
-    --radius: 14px;
+    --orange: #fb923c;
+    --radius: 16px;
   }
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; scroll-padding-top: 76px; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing: antialiased; overflow-x: hidden;
   }
   a { color: var(--accent-2); text-decoration: none; }
+  a:hover { color: #c4b5fd; }
   code { font-family: ui-monospace, Consolas, monospace; background: var(--panel-2); padding: 1px 6px; border-radius: 6px; font-size: .9em; }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+  kbd { font-family: ui-monospace, Consolas, monospace; font-size: .85em; background: var(--panel-3); border: 1px solid var(--line-2);
+    border-bottom-width: 3px; padding: 1px 7px; border-radius: 6px; color: var(--text); }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 20px; }
+  .grad { background: linear-gradient(90deg, var(--accent-2), var(--pink)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 
   /* ---------- Navigation ---------- */
-  nav { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(12px); background: rgba(11, 11, 18, .75); border-bottom: 1px solid var(--line); }
-  nav .wrap { display: flex; align-items: center; gap: 18px; height: 64px; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); font-size: 18px; }
-  .logo { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); display: grid; place-items: center; font-weight: 800; color: #fff; box-shadow: 0 0 24px rgba(139, 92, 246, .45); }
-  nav .links { display: flex; gap: 22px; margin-left: auto; }
-  nav .links a { color: var(--dim); font-size: 15px; transition: color .2s; }
-  nav .links a:hover { color: var(--text); }
-  .btn { display: inline-flex; align-items: center; gap: 8px; border: 0; cursor: pointer; font: inherit; font-weight: 650;
-    padding: 10px 18px; border-radius: 10px; background: var(--panel-2); color: var(--text); transition: transform .15s, box-shadow .2s, background .2s; }
-  .btn:hover { transform: translateY(-1px); background: #232336; }
+  nav.top { position: sticky; top: 0; z-index: 30; backdrop-filter: blur(14px); background: rgba(9, 9, 15, .72); border-bottom: 1px solid var(--line); }
+  nav.top .wrap { display: flex; align-items: center; gap: 18px; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 750; color: var(--text); font-size: 18px; flex-shrink: 0; }
+  .brand:hover { color: var(--text); }
+  .logo { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg, var(--accent), #6d28d9); display: grid; place-items: center;
+    font-weight: 850; color: #fff; box-shadow: 0 0 24px rgba(139, 92, 246, .45); }
+  nav.top .links { display: flex; gap: 4px; margin-left: auto; }
+  nav.top .links a { color: var(--dim); font-size: 14.5px; padding: 7px 11px; border-radius: 8px; transition: color .2s, background .2s; }
+  nav.top .links a:hover, nav.top .links a.on { color: var(--text); background: var(--panel-2); }
+  .menu-btn { display: none; margin-left: auto; background: var(--panel-2); border: 0; color: var(--text); width: 40px; height: 40px; border-radius: 10px; cursor: pointer; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; cursor: pointer; font: inherit; font-weight: 650;
+    padding: 10px 18px; border-radius: 11px; background: var(--panel-2); color: var(--text); transition: transform .15s, box-shadow .2s, background .2s; white-space: nowrap; }
+  .btn:hover { transform: translateY(-1px); background: var(--panel-3); color: var(--text); }
   .btn.primary { background: linear-gradient(135deg, var(--accent), #6d28d9); color: #fff; box-shadow: 0 8px 30px rgba(139, 92, 246, .35); }
-  .btn.primary:hover { box-shadow: 0 10px 38px rgba(139, 92, 246, .55); }
+  .btn.primary:hover { box-shadow: 0 10px 40px rgba(139, 92, 246, .6); color: #fff; }
   .btn.gold { background: var(--gold); color: #2a1a00; }
-  .btn.big { padding: 15px 26px; font-size: 18px; border-radius: 12px; }
+  .btn.big { padding: 15px 26px; font-size: 18px; border-radius: 13px; }
 
   /* ---------- Kopf ---------- */
-  header.hero { position: relative; padding: 90px 0 70px; text-align: center; overflow: hidden; }
-  header.hero::before { content: ""; position: absolute; inset: -40% -20% auto; height: 620px;
-    background: radial-gradient(closest-side, rgba(139, 92, 246, .28), transparent 70%); pointer-events: none; }
-  .hero .big-logo { width: 96px; height: 96px; margin: 0 auto 26px; border-radius: 24px; background: var(--accent); display: grid; place-items: center;
-    font-size: 54px; font-weight: 800; color: #fff; box-shadow: 0 0 60px rgba(139, 92, 246, .55); animation: float 4s ease-in-out infinite; position: relative; }
-  @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-  .hero h1 { font-size: clamp(40px, 7vw, 68px); line-height: 1.05; margin: 0 0 16px; letter-spacing: -1.5px; position: relative; }
-  .hero h1 span { background: linear-gradient(90deg, var(--accent-2), #f0abfc); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .hero p.lead { color: var(--dim); font-size: 19px; max-width: 640px; margin: 0 auto 32px; position: relative; }
-  .hero .cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; position: relative; }
-  .hero .meta { margin-top: 18px; color: var(--dim); font-size: 14px; position: relative; }
-  .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; background: rgba(139, 92, 246, .15); color: var(--accent-2); font-size: 13px; font-weight: 600; }
+  header.hero { position: relative; padding: 80px 0 60px; overflow: hidden; }
+  header.hero::before { content: ""; position: absolute; inset: -30% -10% auto; height: 700px;
+    background: radial-gradient(closest-side at 30% 40%, rgba(139, 92, 246, .26), transparent 70%),
+                radial-gradient(closest-side at 75% 30%, rgba(244, 114, 182, .14), transparent 70%); pointer-events: none; }
+  header.hero::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .35;
+    background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 48px 48px; mask-image: radial-gradient(ellipse at 50% 30%, #000 20%, transparent 70%); }
+  .hero-grid { position: relative; z-index: 1; display: grid; grid-template-columns: 1.05fr 1fr; gap: 48px; align-items: center; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 6px; border-radius: 999px; background: rgba(139, 92, 246, .12);
+    border: 1px solid rgba(139, 92, 246, .3); color: var(--accent-2); font-size: 13.5px; font-weight: 600; margin-bottom: 20px; }
+  .eyebrow b { background: var(--accent); color: #fff; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+  .hero h1 { font-size: clamp(40px, 6.4vw, 70px); line-height: 1.02; margin: 0 0 18px; letter-spacing: -2px; }
+  .hero p.lead { color: var(--dim); font-size: 19px; max-width: 560px; margin: 0 0 30px; }
+  .hero .cta { display: flex; gap: 12px; flex-wrap: wrap; }
+  .hero .meta { margin-top: 18px; color: var(--faint); font-size: 14px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 46px; position: relative; z-index: 1; }
+  .stat { background: rgba(19, 19, 30, .7); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+  .stat b { display: block; font-size: 28px; line-height: 1.1; letter-spacing: -.5px; }
+  .stat span { color: var(--dim); font-size: 14px; }
+
+  /* Nachbau des Client-Menüs */
+  .mock { position: relative; border-radius: 18px; background: #0f0f18; border: 1px solid var(--line-2); box-shadow: 0 30px 80px rgba(0, 0, 0, .55), 0 0 0 1px rgba(139, 92, 246, .1);
+    overflow: hidden; transform: perspective(1400px) rotateY(-8deg) rotateX(3deg); transition: transform .6s; }
+  .mock:hover { transform: perspective(1400px) rotateY(-2deg) rotateX(1deg); }
+  .mock .bar { height: 3px; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+  .mock .body { display: grid; grid-template-columns: 132px 1fr; min-height: 330px; }
+  .mock .side { background: #0c0c14; border-right: 1px solid var(--line); padding: 14px 10px; font-size: 12.5px; }
+  .mock .side .b { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-bottom: 14px; }
+  .mock .side .b i { width: 22px; height: 22px; border-radius: 7px; background: var(--accent); display: grid; place-items: center; font-style: normal; font-size: 12px; }
+  .mock .side .g { color: var(--faint); font-size: 10px; letter-spacing: 1px; margin: 10px 4px 4px; }
+  .mock .side div.it { padding: 5px 8px; border-radius: 7px; color: var(--dim); margin: 1px 0; }
+  .mock .side div.it.on { background: rgba(139, 92, 246, .22); color: var(--text); box-shadow: inset 3px 0 0 var(--accent); }
+  .mock .main { padding: 16px; }
+  .mock .main h4 { margin: 0 0 4px; font-size: 16px; }
+  .mock .main .u { width: 36px; height: 2px; background: var(--accent); border-radius: 2px; margin-bottom: 14px; }
+  .mock .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .mock .mc { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 11.5px; position: relative; }
+  .mock .mc b { display: block; font-size: 12px; margin-bottom: 2px; }
+  .mock .mc span { color: var(--faint); font-size: 10.5px; }
+  .mock .tg { position: absolute; right: 9px; top: 10px; width: 22px; height: 12px; border-radius: 6px; background: var(--panel-3); }
+  .mock .tg.on { background: var(--accent); }
+  .mock .tg::after { content: ""; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; border-radius: 50%; background: #fff; transition: left .3s; }
+  .mock .tg.on::after { left: 12px; }
+  .mock .pass { margin-top: 12px; background: var(--panel); border: 1px solid rgba(96, 165, 250, .3); border-radius: 10px; padding: 10px; overflow: hidden; }
+  .mock .pass small { color: #60a5fa; font-weight: 700; font-size: 10.5px; letter-spacing: .5px; }
+  .mock .track { display: flex; gap: 6px; margin-top: 8px; animation: slide 14s linear infinite; width: max-content; }
+  .mock .tile { width: 54px; height: 52px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); display: grid; place-items: center; font-size: 10px; color: var(--dim); }
+  .mock .tile.gold { border-color: rgba(251, 191, 36, .6); box-shadow: 0 0 12px rgba(251, 191, 36, .25); color: var(--gold); }
+  .mock .tile.epic { border-color: rgba(192, 132, 252, .6); color: #c084fc; }
+  @keyframes slide { to { transform: translateX(-50%); } }
 
   /* ---------- Abschnitte ---------- */
-  section { padding: 70px 0; }
-  section h2 { font-size: 34px; margin: 0 0 8px; letter-spacing: -.5px; }
-  section .sub { color: var(--dim); margin: 0 0 34px; }
-  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  section { padding: 84px 0; position: relative; }
+  section.alt { background: var(--bg-2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .kicker { color: var(--accent-2); font-weight: 700; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; }
+  section h2 { font-size: clamp(30px, 4vw, 40px); margin: 0 0 10px; letter-spacing: -.8px; line-height: 1.15; }
+  section .sub { color: var(--dim); margin: 0 0 36px; max-width: 720px; font-size: 17px; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; transition: transform .2s, border-color .2s, box-shadow .2s; }
-  .card:hover { transform: translateY(-3px); border-color: rgba(139, 92, 246, .45); box-shadow: 0 12px 34px rgba(0, 0, 0, .35); }
-  .card .ico { width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center; background: rgba(139, 92, 246, .14); color: var(--accent-2); margin-bottom: 14px; }
+  .card:hover { transform: translateY(-3px); border-color: rgba(139, 92, 246, .45); box-shadow: 0 14px 36px rgba(0, 0, 0, .35); }
+  .ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: rgba(139, 92, 246, .14); color: var(--accent-2); margin-bottom: 14px; }
+  .ico.pink { background: rgba(244, 114, 182, .13); color: var(--pink); }
+  .ico.gold { background: rgba(251, 191, 36, .13); color: var(--gold); }
+  .ico.cyan { background: rgba(34, 211, 238, .12); color: var(--cyan); }
+  .ico.green { background: rgba(74, 222, 128, .12); color: var(--green); }
   .card h3 { margin: 0 0 6px; font-size: 18px; }
   .card p { margin: 0; color: var(--dim); font-size: 15px; }
+  .card ul { margin: 10px 0 0; padding-left: 18px; color: var(--dim); font-size: 14.5px; }
+  .card li { margin: 3px 0; }
+  .tag { display: inline-block; font-size: 11.5px; font-weight: 700; letter-spacing: .4px; padding: 2px 8px; border-radius: 999px; margin-left: 6px; vertical-align: 2px;
+    background: rgba(139, 92, 246, .16); color: var(--accent-2); }
+  .tag.new { background: rgba(74, 222, 128, .15); color: var(--green); }
+  .tag.gold { background: rgba(251, 191, 36, .15); color: var(--gold); }
+
+  /* Module mit Reitern */
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
+  .tabs button { border: 1px solid var(--line-2); background: var(--panel); color: var(--dim); font: inherit; font-size: 15px; font-weight: 600; padding: 9px 16px;
+    border-radius: 999px; cursor: pointer; transition: .2s; display: inline-flex; gap: 8px; align-items: center; }
+  .tabs button:hover { color: var(--text); border-color: rgba(139, 92, 246, .5); }
+  .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 6px 22px rgba(139, 92, 246, .35); }
+  .tabs button .n { font-size: 12px; opacity: .8; background: rgba(0, 0, 0, .2); padding: 0 7px; border-radius: 999px; }
+  .mods { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+  .mod { display: flex; gap: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; transition: border-color .2s, transform .2s; }
+  .mod:hover { border-color: rgba(139, 92, 246, .4); transform: translateY(-2px); }
+  .mod .dot { flex-shrink: 0; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: rgba(139, 92, 246, .13); color: var(--accent-2); }
+  .mod h4 { margin: 0 0 3px; font-size: 16px; }
+  .mod p { margin: 0; color: var(--dim); font-size: 14.5px; }
+  .mods-note { color: var(--faint); font-size: 14px; margin-top: 18px; }
+
+  /* Spotlight (Pack Mixer, Battle Pass) */
+  .spot { display: grid; grid-template-columns: 1fr 1fr; gap: 46px; align-items: center; }
+  .spot.rev .spot-text { order: 2; }
+  .checks { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 12px; }
+  .checks li { display: flex; gap: 12px; color: var(--dim); }
+  .checks li::before { content: ""; flex-shrink: 0; width: 22px; height: 22px; margin-top: 1px; border-radius: 7px; background: rgba(74, 222, 128, .15)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234ade80' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/14px no-repeat; }
+  .checks b { color: var(--text); }
+  .howto { counter-reset: s; display: grid; gap: 10px; margin-top: 22px; }
+  .howto div { display: flex; gap: 12px; align-items: flex-start; color: var(--dim); }
+  .howto div::before { counter-increment: s; content: counter(s); flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff;
+    font-weight: 800; font-size: 14px; display: grid; place-items: center; }
+
+  .pm { border-radius: 18px; background: #0f0f18; border: 1px solid var(--line-2); box-shadow: 0 30px 70px rgba(0, 0, 0, .5); overflow: hidden; font-size: 12px; }
+  .pm .mix { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--line); align-items: center; color: var(--faint); }
+  .pm .mix i { width: 22px; height: 22px; border-radius: 6px; display: block; }
+  .pm .cols { display: grid; grid-template-columns: 100px 1fr 130px; min-height: 260px; }
+  .pm .groups { border-right: 1px solid var(--line); padding: 10px 8px; }
+  .pm .groups div { padding: 5px 8px; border-radius: 7px; color: var(--dim); margin-bottom: 2px; }
+  .pm .groups div.on { background: rgba(139, 92, 246, .2); color: var(--text); }
+  .pm .items { padding: 10px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; align-content: start; }
+  .pm .it { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 8px 6px 6px; text-align: center; color: var(--dim); font-size: 10.5px; position: relative; }
+  .pm .it.pick { border-color: rgba(251, 191, 36, .55); }
+  .pm .it.pick::after { content: "PICKED"; position: absolute; top: 4px; left: 4px; font-size: 8px; font-weight: 800; background: var(--gold); color: #2a1a00; padding: 0 4px; border-radius: 4px; }
+  .pm .sw { width: 34px; height: 34px; margin: 6px auto 6px; }
+  .pm .insp { border-left: 1px solid var(--line); padding: 10px; }
+  .pm .insp .big { height: 76px; border-radius: 10px; background: var(--panel); display: grid; place-items: center; margin-bottom: 8px; }
+  .pm .var { display: flex; gap: 6px; align-items: center; padding: 5px 6px; border-radius: 7px; color: var(--dim); font-size: 10.5px; }
+  .pm .var.on { background: rgba(74, 222, 128, .12); color: var(--green); }
+  .pm .foot { border-top: 1px solid var(--line); padding: 10px 12px; display: flex; gap: 8px; justify-content: flex-end; }
+  .pm .foot span { padding: 5px 10px; border-radius: 7px; background: var(--panel-2); color: var(--dim); font-size: 11px; }
+  .pm .foot span.go { background: var(--gold); color: #2a1a00; font-weight: 800; box-shadow: 0 0 16px rgba(251, 191, 36, .35); }
+  .parts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 18px; }
+  .parts span { font-size: 13px; padding: 4px 10px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); color: var(--dim); }
+
+  /* Battle Pass */
+  .bp { border-radius: 18px; background: #0f0f18; border: 1px solid var(--line-2); padding: 16px; box-shadow: 0 30px 70px rgba(0, 0, 0, .5); overflow: hidden; }
+  .bp-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .bp-head b { font-size: 17px; }
+  .bp-head span { color: #60a5fa; font-size: 13px; font-weight: 600; }
+  .bp-xp { height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; margin-bottom: 14px; }
+  .bp-xp i { display: block; height: 100%; width: 62%; background: linear-gradient(90deg, #60a5fa, var(--cyan)); border-radius: 4px; }
+  .bp-rows { overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; scrollbar-color: #60a5fa transparent; }
+  .bp-rows::-webkit-scrollbar { height: 6px; }
+  .bp-rows::-webkit-scrollbar-thumb { background: #60a5fa; border-radius: 3px; }
+  .bp-row { display: flex; gap: 8px; width: max-content; }
+  .bp-card { width: 86px; height: 82px; flex-shrink: 0; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 4px; font-size: 11px; color: var(--dim); position: relative; text-align: center; padding: 4px; }
+  .bp-card .c { width: 22px; height: 22px; border-radius: 50%; background: var(--gold); color: #92400e; font-weight: 900; font-size: 12px; display: grid; place-items: center; }
+  .bp-card .s { font-size: 22px; line-height: 1; }
+  .bp-card.claim { border-color: rgba(251, 191, 36, .7); box-shadow: 0 0 14px rgba(251, 191, 36, .25); }
+  .bp-card.claim::before { content: "CLAIM"; position: absolute; top: 4px; left: 4px; font-size: 8px; font-weight: 800; background: var(--gold); color: #2a1a00; padding: 0 4px; border-radius: 4px; }
+  .bp-card.done::after { content: "✓"; position: absolute; top: 4px; right: 5px; width: 14px; height: 14px; border-radius: 50%; background: var(--green); color: #052e16; font-size: 10px; font-weight: 900; display: grid; place-items: center; }
+  .bp-card.lock { opacity: .55; }
+  .bp-card.prem { background: linear-gradient(180deg, rgba(251, 191, 36, .06), var(--panel)); border-color: rgba(251, 191, 36, .25); }
+  .bp-card.rare { border-color: rgba(96, 165, 250, .6); color: #93c5fd; }
+  .bp-card.epic { border-color: rgba(192, 132, 252, .65); color: #d8b4fe; }
+  .bp-card.leg { border-color: rgba(251, 191, 36, .8); color: var(--gold); }
+  .bp-line { display: flex; gap: 8px; width: max-content; margin: 8px 0; }
+  .bp-line span { width: 86px; flex-shrink: 0; text-align: center; font-size: 11px; font-weight: 800; }
+  .bp-line span b { display: inline-block; min-width: 22px; padding: 1px 6px; border-radius: 9px; background: var(--panel-2); color: var(--faint); }
+  .bp-line span.r b { background: #60a5fa; color: #0a0a12; }
+  .bp-label { font-size: 11px; font-weight: 800; letter-spacing: 1px; margin: 2px 0 6px; }
 
   /* ---------- Codes ---------- */
   .codes { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); }
-  .code { position: relative; overflow: hidden; background: linear-gradient(160deg, #1b1830, var(--panel)); border: 1px solid rgba(251, 191, 36, .22); border-radius: var(--radius); padding: 22px; }
-  .code::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, .06) 50%, transparent 60%); transform: translateX(-100%); animation: shine 4s ease-in-out infinite; }
+  .code { position: relative; overflow: hidden; background: linear-gradient(160deg, #1d1832, var(--panel)); border: 1px solid rgba(251, 191, 36, .22); border-radius: var(--radius); padding: 22px; }
+  .code::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, .06) 50%, transparent 60%); transform: translateX(-100%); animation: shine 4s ease-in-out infinite; pointer-events: none; }
   @keyframes shine { 60%, 100% { transform: translateX(100%); } }
   .code .coins { display: flex; align-items: center; gap: 10px; font-size: 26px; font-weight: 800; color: var(--gold); }
   .coin { width: 28px; height: 28px; border-radius: 50%; background: var(--gold); color: #92400e; display: grid; place-items: center; font-size: 15px; font-weight: 900; box-shadow: 0 0 16px rgba(251, 191, 36, .45); }
   .code .value { margin: 14px 0 12px; display: flex; gap: 10px; align-items: center; }
   .code .value code { font-size: 16px; padding: 9px 10px; letter-spacing: .5px; flex: 1; min-width: 0; text-align: center; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; background: rgba(0, 0, 0, .35); border: 1px dashed rgba(251, 191, 36, .35); }
-  .code .value .btn { flex-shrink: 0; }
+  .code .value .btn { flex-shrink: 0; position: relative; z-index: 1; }
   .code .note { color: var(--dim); font-size: 13px; }
-  .empty { color: var(--dim); background: var(--panel); border: 1px dashed var(--line); border-radius: var(--radius); padding: 26px; text-align: center; }
+  .empty { color: var(--dim); background: var(--panel); border: 1px dashed var(--line-2); border-radius: var(--radius); padding: 26px; text-align: center; }
 
   /* ---------- Updates ---------- */
   .updates { display: flex; flex-direction: column; gap: 12px; }
@@ -99,102 +242,351 @@
   .md { padding: 0 22px 20px 100px; color: #cfcfe0; font-size: 15px; }
   .md ul { padding-left: 20px; margin: 6px 0; }
   .md li { margin: 3px 0; }
-  .md table { border-collapse: collapse; margin: 10px 0; font-size: 14px; }
+  .md table { border-collapse: collapse; margin: 10px 0; font-size: 14px; display: block; overflow-x: auto; }
   .md th, .md td { border: 1px solid var(--line); padding: 5px 10px; text-align: left; }
   .md th { background: var(--panel-2); }
   .md p { margin: 8px 0; }
-  .latest-badge { font-size: 12px; margin-left: 6px; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; background: rgba(139, 92, 246, .15); color: var(--accent-2); font-size: 12px; font-weight: 600; margin-left: 6px; }
 
-  /* ---------- Installation ---------- */
-  .steps { counter-reset: step; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
-  .step { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px 22px 22px 70px; position: relative; }
-  .step::before { counter-increment: step; content: counter(step); position: absolute; left: 20px; top: 20px; width: 34px; height: 34px; border-radius: 50%;
-    background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 800; }
+  /* ---------- Installation & FAQ ---------- */
+  .steps { counter-reset: step; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+  .step { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px 22px 22px 72px; position: relative; }
+  .step::before { counter-increment: step; content: counter(step); position: absolute; left: 20px; top: 20px; width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #6d28d9); color: #fff; display: grid; place-items: center; font-weight: 800; }
   .step h3 { margin: 0 0 4px; font-size: 17px; }
   .step p { margin: 0; color: var(--dim); font-size: 15px; }
+  .faq { display: grid; gap: 10px; max-width: 860px; }
+  .faq details { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+  .faq summary { cursor: pointer; padding: 16px 20px; font-weight: 650; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; color: var(--accent-2); font-size: 20px; line-height: 1; transition: transform .2s; }
+  .faq details[open] summary::after { transform: rotate(45deg); }
+  .faq details p { margin: 0; padding: 0 20px 18px; color: var(--dim); }
 
-  footer { border-top: 1px solid var(--line); padding: 30px 0 40px; color: var(--dim); font-size: 14px; }
+  .cta-box { text-align: center; background: radial-gradient(ellipse at top, rgba(139, 92, 246, .22), transparent 70%), var(--panel); border: 1px solid rgba(139, 92, 246, .3);
+    border-radius: 24px; padding: 54px 24px; }
+  .cta-box h2 { margin-bottom: 10px; }
+  .cta-box p { color: var(--dim); margin: 0 0 26px; }
+
+  footer { border-top: 1px solid var(--line); padding: 30px 0 40px; color: var(--faint); font-size: 14px; }
   footer .wrap { display: flex; gap: 14px; flex-wrap: wrap; justify-content: space-between; }
 
   .toast { position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 30px); background: var(--green); color: #052e16; font-weight: 700;
-    padding: 10px 18px; border-radius: 10px; opacity: 0; transition: .25s; pointer-events: none; z-index: 20; }
+    padding: 10px 18px; border-radius: 10px; opacity: 0; transition: .25s; pointer-events: none; z-index: 40; }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
-  .reveal { opacity: 0; transform: translateY(16px); transition: opacity .6s, transform .6s; }
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s, transform .6s; }
   .reveal.in { opacity: 1; transform: none; }
   .skeleton { background: linear-gradient(90deg, var(--panel) 25%, var(--panel-2) 50%, var(--panel) 75%); background-size: 200% 100%; animation: sk 1.4s infinite; border-radius: var(--radius); height: 140px; }
   @keyframes sk { to { background-position: -200% 0; } }
 
-  @media (max-width: 720px) {
-    nav .links { display: none; }
-    .md { padding: 0 18px 18px; }
-    header.hero { padding: 60px 0 50px; }
+  @media (max-width: 980px) {
+    .hero-grid, .spot { grid-template-columns: 1fr; gap: 36px; }
+    .spot.rev .spot-text { order: 0; }
+    .mock { transform: none; }
+    .mock:hover { transform: none; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
   }
-  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  @media (max-width: 860px) {
+    nav.top .links { display: none; position: absolute; top: 64px; left: 0; right: 0; flex-direction: column; background: rgba(9, 9, 15, .97);
+      border-bottom: 1px solid var(--line); padding: 10px 16px 16px; }
+    nav.top .links.open { display: flex; }
+    .menu-btn { display: grid; place-items: center; }
+    nav.top .wrap > .btn { display: none; }
+  }
+  @media (max-width: 640px) {
+    header.hero { padding: 54px 0 40px; }
+    section { padding: 62px 0; }
+    .md { padding: 0 18px 18px; }
+    .mock .body { grid-template-columns: 1fr; }
+    .mock .side { display: none; }
+    .mock .cards { grid-template-columns: repeat(2, 1fr); }
+    .pm .cols { grid-template-columns: 1fr; }
+    .pm .groups, .pm .insp { display: none; }
+    .stat b { font-size: 24px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } html { scroll-behavior: auto; } }
 </style>
 </head>
 <body>
 
-<nav>
+<nav class="top">
   <div class="wrap">
     <a class="brand" href="#"><div class="logo">G</div>GoonClient</a>
-    <div class="links">
+    <div class="links" id="nav-links">
       <a href="#features">Funktionen</a>
+      <a href="#modules">Module</a>
+      <a href="#packmixer">Pack Mixer</a>
+      <a href="#economy">Shop &amp; Pass</a>
+      <a href="#social">Freunde</a>
       <a href="#codes">Codes</a>
       <a href="#updates">Updates</a>
       <a href="#install">Installation</a>
     </div>
     <a class="btn primary" href="/download">Download</a>
+    <button class="menu-btn" id="menu-btn" aria-label="Menü">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
   </div>
 </nav>
 
 <header class="hero">
   <div class="wrap">
-    <div class="big-logo">G</div>
-    <h1>Der <span>GoonClient</span></h1>
-    <p class="lead">Der Fabric-Client für Minecraft&nbsp;1.21.11: PvP-Module, Goon Coins und der Hourly Shop, Capes und Hüte,
-      die alle sehen, Emotes, Freunde und der Pack Mixer für deine Texture Packs.</p>
-    <div class="cta">
-      <a class="btn primary big" href="/download" id="dl-hero">⬇ Download <span id="dl-version"></span></a>
-      <a class="btn big" href="#install">So installierst du ihn</a>
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow"><b>NEU</b> Battle Pass Season 1: Neon Nights</div>
+        <h1>Dein Minecraft.<br><span class="grad">Nur besser.</span></h1>
+        <p class="lead">GoonClient ist der kostenlose Fabric-Client für Minecraft&nbsp;1.21.11: über 30 PvP- und HUD-Module, ein Pack Mixer
+          für deine Texture Packs, Goon Coins mit Hourly Shop und Battle Pass, Capes, Hüte und Emotes, die andere Spieler sehen, und Freunde.</p>
+        <div class="cta">
+          <a class="btn primary big" href="/download">⬇ Download <span id="dl-version"></span></a>
+          <a class="btn big" href="#features">Alle Funktionen</a>
+        </div>
+        <div class="meta" id="hero-meta">Minecraft 1.21.11 · Fabric · kostenlos</div>
+      </div>
+      <div class="mock reveal" aria-hidden="true">
+        <div class="bar"></div>
+        <div class="body">
+          <div class="side">
+            <div class="b"><i>G</i>GoonClient</div>
+            <div class="it">Home</div>
+            <div class="g">MODULES</div>
+            <div class="it on">Render</div>
+            <div class="it">HUD</div>
+            <div class="it">Utility</div>
+            <div class="g">CLIENT</div>
+            <div class="it">Hourly Shop</div>
+            <div class="it">Battle Pass</div>
+            <div class="it">Pack Mixer</div>
+          </div>
+          <div class="main">
+            <h4>Render</h4>
+            <div class="u"></div>
+            <div class="cards">
+              <div class="mc"><b>Custom Hitboxes</b><span>Farbe, Linie, Füllung</span><i class="tg on"></i></div>
+              <div class="mc"><b>Block Highlight</b><span>Eigener Rahmen</span><i class="tg on" id="mock-t1"></i></div>
+              <div class="mc"><b>Item Scale</b><span>Items kleiner</span><i class="tg"></i></div>
+              <div class="mc"><b>Motion Blur</b><span>Weiche Bewegung</span><i class="tg" id="mock-t2"></i></div>
+              <div class="mc"><b>Totem Tweaks</b><span>Kleiner Pop</span><i class="tg on"></i></div>
+              <div class="mc"><b>Stretched Res</b><span>4:3 spielen</span><i class="tg"></i></div>
+            </div>
+            <div class="pass">
+              <small>BATTLE PASS · SEASON 1</small>
+              <div class="track">
+                <div class="tile gold">110</div><div class="tile gold">120</div><div class="tile epic">★ Robot</div><div class="tile">170</div>
+                <div class="tile epic">⚡ Volt</div><div class="tile">190</div><div class="tile gold">1000</div><div class="tile epic">★ Cubes</div>
+                <div class="tile gold">110</div><div class="tile gold">120</div><div class="tile epic">★ Robot</div><div class="tile">170</div>
+                <div class="tile epic">⚡ Volt</div><div class="tile">190</div><div class="tile gold">1000</div><div class="tile epic">★ Cubes</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="meta" id="hero-meta">Minecraft 1.21.11 · Fabric · kostenlos</div>
+    <div class="stats">
+      <div class="stat reveal"><b class="grad">30+</b><span>Module &amp; Gadgets</span></div>
+      <div class="stat reveal"><b class="grad">160+</b><span>Cosmetics &amp; Emotes</span></div>
+      <div class="stat reveal"><b class="grad">30</b><span>Battle-Pass-Stufen</span></div>
+      <div class="stat reveal"><b class="grad">0 €</b><span>für immer kostenlos</span></div>
+    </div>
   </div>
 </header>
 
+<!-- ========== Überblick ========== -->
 <section id="features">
   <div class="wrap">
-    <h2 class="reveal">Was der GoonClient kann</h2>
-    <p class="sub reveal">Alles in einem Menü – öffnen mit <code>Right Shift</code>.</p>
-    <div class="grid" id="feature-grid"></div>
+    <div class="kicker reveal">Überblick</div>
+    <h2 class="reveal">Alles in einem Menü</h2>
+    <p class="sub reveal">Öffnen mit <kbd>Right Shift</kbd> (änderbar). Links die Tabs, rechts die Einstellungen – mit Suche, Animationen und Themes.</p>
+    <div class="grid" id="overview"></div>
   </div>
 </section>
 
-<section id="codes">
+<!-- ========== Module ========== -->
+<section id="modules" class="alt">
   <div class="wrap">
+    <div class="kicker reveal">Module</div>
+    <h2 class="reveal">Jedes Modul im Detail</h2>
+    <p class="sub reveal">Jedes Modul lässt sich einzeln ein- und ausschalten und hat eigene Einstellungen (Farben, Größe, Tastenbelegung …).
+      HUD-Elemente verschiebst du im HUD-Editor einfach mit der Maus.</p>
+    <div class="tabs" id="mod-tabs" role="tablist"></div>
+    <div class="mods" id="mod-list"></div>
+    <p class="mods-note">Tipp: Die Suchleiste oben im Menü findet jedes Modul über Name oder Beschreibung.</p>
+  </div>
+</section>
+
+<!-- ========== Pack Mixer ========== -->
+<section id="packmixer">
+  <div class="wrap spot">
+    <div class="spot-text">
+      <div class="kicker reveal">Pack Mixer</div>
+      <h2 class="reveal">Das Beste aus all deinen Texture Packs</h2>
+      <p class="sub reveal" style="margin-bottom:0">Das Schwert aus dem einen Pack, die Spitzhacke aus dem anderen und das Totem aus einem dritten?
+        Der Pack Mixer nimmt deine Resource Packs auseinander und baut dir daraus mit einem Klick dein eigenes Pack.</p>
+      <div class="howto reveal">
+        <div>Packs (.zip oder Ordner) in <code>.minecraft/goonclient-packs</code> legen – „Open folder“ öffnet den Ordner.</div>
+        <div>Im Tab <b>Pack Mixer</b> ein Teil anklicken. Der Inspector zeigt <b>Vanilla</b> und jede Variante aus deinen Packs nebeneinander.</div>
+        <div>Variante wählen, bis dein Mix fertig ist. Optional ein <b>Base Pack</b>, das komplett übernommen wird.</div>
+        <div><b>★ Build &amp; apply</b>: GoonClient baut „GoonClient Mix“, schaltet es ganz oben ein und lädt neu.</div>
+      </div>
+      <ul class="checks reveal">
+        <li><span><b>Nur echte Änderungen:</b> Jedes Teil wird mit den Vanilla-Dateien verglichen; Kopien von Minecraft-Dateien werden ausgeblendet.</span></li>
+        <li><span><b>Zusammengehöriges bleibt zusammen:</b> Bogen mit allen Spann-Stufen, Rüstung als ganzes Set samt Körpermodell, Elytra mit Flügeln, 3D-Modelle mit allen Texturen.</span></li>
+        <li><span><b>Sounds inklusive:</b> Wählst du die Armbrust aus einem Pack, kommen ihre Schuss-Sounds mit (♪ auf der Karte).</span></li>
+        <li><span><b>Sicher:</b> Deine Packs werden nur gelesen, die Auswahl wird gespeichert, „Turn off“ schaltet den Mix wieder aus.</span></li>
+      </ul>
+      <div class="parts reveal" aria-label="Abteile">
+        <span>Swords</span><span>Axes</span><span>Pickaxes</span><span>Spears</span><span>Mace</span><span>Bow</span><span>Crossbow</span><span>Shield</span>
+        <span>Armor</span><span>Totem</span><span>Golden Apples</span><span>Ender Pearls</span><span>End Crystal</span><span>Respawn Anchor</span><span>Obsidian</span>
+        <span>Glowstone</span><span>TNT Minecart</span><span>Cobwebs</span><span>Ores</span><span>Ore Items</span><span>Fire</span><span>Enchant Glint</span>
+        <span>Armor Glint</span><span>Hearts</span><span>Inventory GUI</span><span>Stone</span><span>Deepslate</span><span>Grass Block</span>
+      </div>
+    </div>
+    <div class="pm reveal" aria-hidden="true">
+      <div class="mix">Your mix:
+        <i style="background:linear-gradient(135deg,#22d3ee,#0e7490)"></i><i style="background:linear-gradient(135deg,#f472b6,#9d174d)"></i>
+        <i style="background:linear-gradient(135deg,#fbbf24,#b45309)"></i><i style="background:linear-gradient(135deg,#a78bfa,#5b21b6)"></i>
+      </div>
+      <div class="cols">
+        <div class="groups">
+          <div class="on">Swords</div><div>Pickaxes</div><div>Armor</div><div>Totem</div><div>Bow</div><div>Hearts</div><div>Packs</div>
+        </div>
+        <div class="items">
+          <div class="it pick"><svg class="sw" viewBox="0 0 16 16"><path d="M13 1h2v2l-8 8-2-2z" fill="#22d3ee"/><path d="M4 9l3 3-1 1-1-1-2 2-1-1 2-2-1-1z" fill="#7c5a2a"/></svg>Diamond</div>
+          <div class="it"><svg class="sw" viewBox="0 0 16 16"><path d="M13 1h2v2l-8 8-2-2z" fill="#4b4b5a"/><path d="M4 9l3 3-1 1-1-1-2 2-1-1 2-2-1-1z" fill="#7c5a2a"/></svg>Netherite</div>
+          <div class="it"><svg class="sw" viewBox="0 0 16 16"><path d="M13 1h2v2l-8 8-2-2z" fill="#e5e7eb"/><path d="M4 9l3 3-1 1-1-1-2 2-1-1 2-2-1-1z" fill="#7c5a2a"/></svg>Iron</div>
+          <div class="it"><svg class="sw" viewBox="0 0 16 16"><path d="M13 1h2v2l-8 8-2-2z" fill="#fbbf24"/><path d="M4 9l3 3-1 1-1-1-2 2-1-1 2-2-1-1z" fill="#7c5a2a"/></svg>Gold</div>
+          <div class="it"><svg class="sw" viewBox="0 0 16 16"><path d="M13 1h2v2l-8 8-2-2z" fill="#9ca3af"/><path d="M4 9l3 3-1 1-1-1-2 2-1-1 2-2-1-1z" fill="#7c5a2a"/></svg>Stone</div>
+          <div class="it"><svg class="sw" viewBox="0 0 16 16"><path d="M13 1h2v2l-8 8-2-2z" fill="#b08850"/><path d="M4 9l3 3-1 1-1-1-2 2-1-1 2-2-1-1z" fill="#7c5a2a"/></svg>Wood</div>
+        </div>
+        <div class="insp">
+          <div class="big"><svg width="56" height="56" viewBox="0 0 16 16"><path d="M13 1h2v2l-8 8-2-2z" fill="#22d3ee"/><path d="M4 9l3 3-1 1-1-1-2 2-1-1 2-2-1-1z" fill="#7c5a2a"/></svg></div>
+          <div class="var">Vanilla</div>
+          <div class="var on">✓ Pack „Frost“</div>
+          <div class="var">Pack „Neon 16x“</div>
+          <div class="var">Pack „Crimson“</div>
+        </div>
+      </div>
+      <div class="foot"><span>Open folder</span><span>Rescan</span><span class="go">★ Build &amp; apply</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== Shop & Pass ========== -->
+<section id="economy" class="alt">
+  <div class="wrap">
+    <div class="spot rev">
+      <div class="spot-text">
+        <div class="kicker reveal">Goon Coins</div>
+        <h2 class="reveal">Spielen, sammeln, freischalten</h2>
+        <p class="sub reveal" style="margin-bottom:0">Für jede Minute aktiver Spielzeit bekommst du Goon Coins (AFK zählt nicht). Damit kaufst du Capes, Badges,
+          animierte Nametags, Hüte, Flügel, Accessoires und Emotes.</p>
+        <ul class="checks reveal">
+          <li><span><b>Battle Pass:</b> 30 Stufen mit Free- und Premium-Track (Premium: 1000 Coins). XP für Spielzeit, tägliche Belohnung und Missionen.
+            Season 1 „Neon Nights“ hat 7 limitierte Cosmetics, z.B. das animierte Synthwave-Cape.</span></li>
+          <li><span><b>Hourly Shop:</b> Jede Stunde 5 neue Items, je seltener desto wertvoller (Common bis Legendary).</span></li>
+          <li><span><b>Tägliche Belohnung &amp; Missionen:</b> Login-Streak mit bis zu 600 Coins an Tag 7 und 23 Missionen mit Coin-Belohnung.</span></li>
+        </ul>
+      </div>
+      <div class="bp reveal" aria-label="Battle Pass Vorschau">
+        <div class="bp-head"><b>Battle Pass</b><span>Season 1: Neon Nights</span></div>
+        <div class="bp-xp"><i></i></div>
+        <div class="bp-rows">
+          <div class="bp-label" style="color:#60a5fa">FREE</div>
+          <div class="bp-row">
+            <div class="bp-card done"><div class="c">G</div>110</div><div class="bp-card done"><div class="c">G</div>120</div>
+            <div class="bp-card claim"><div class="c">G</div>130</div><div class="bp-card claim"><div class="c">G</div>140</div>
+            <div class="bp-card claim"><div class="c">G</div>500</div><div class="bp-card lock"><div class="c">G</div>160</div>
+            <div class="bp-card lock"><div class="c">G</div>170</div><div class="bp-card lock rare"><div class="s">⚡</div>Volt Badge</div>
+            <div class="bp-card lock"><div class="c">G</div>190</div><div class="bp-card lock"><div class="c">G</div>1000</div>
+          </div>
+          <div class="bp-line"><span class="r"><b>1</b></span><span class="r"><b>2</b></span><span class="r"><b>3</b></span><span class="r"><b>4</b></span><span class="r"><b>5</b></span>
+            <span><b>6</b></span><span><b>7</b></span><span><b>8</b></span><span><b>9</b></span><span><b>10</b></span></div>
+          <div class="bp-row">
+            <div class="bp-card prem done"><div class="c">G</div>165</div><div class="bp-card prem done"><div class="c">G</div>180</div>
+            <div class="bp-card prem claim"><div class="c">G</div>195</div><div class="bp-card prem claim"><div class="c">G</div>210</div>
+            <div class="bp-card prem claim"><div class="c">G</div>225</div><div class="bp-card prem lock rare"><div class="s">🤖</div>Robot Emote</div>
+            <div class="bp-card prem lock"><div class="c">G</div>255</div><div class="bp-card prem lock"><div class="c">G</div>270</div>
+            <div class="bp-card prem lock"><div class="c">G</div>285</div><div class="bp-card prem lock"><div class="c">G</div>1500</div>
+          </div>
+          <div class="bp-label" style="color:var(--gold);margin-top:6px">PREMIUM</div>
+        </div>
+      </div>
+    </div>
+    <div class="grid" id="economy-grid" style="margin-top:46px"></div>
+  </div>
+</section>
+
+<!-- ========== Freunde ========== -->
+<section id="social">
+  <div class="wrap">
+    <div class="kicker reveal">Gemeinsam</div>
+    <h2 class="reveal">Freunde, Emotes und Cosmetics für alle sichtbar</h2>
+    <p class="sub reveal">Über den GoonClient-Server sehen sich alle GoonClient-Spieler – auf jedem Minecraft-Server, auch wenn der Server selbst nichts davon weiß.</p>
+    <div class="grid" id="social-grid"></div>
+  </div>
+</section>
+
+<!-- ========== Codes ========== -->
+<section id="codes" class="alt">
+  <div class="wrap">
+    <div class="kicker reveal">Gratis Coins</div>
     <h2 class="reveal">Redeem-Codes</h2>
-    <p class="sub reveal">Gratis Goon Coins: im Spiel im <b>Hourly Shop</b> unter „Redeem code“ eintippen. Jeder Code gilt einmal pro Minecraft-Account.</p>
+    <p class="sub reveal">Im Spiel im <b>Hourly Shop</b> unten bei „Redeem code“ eintippen. Jeder Code gilt einmal pro Minecraft-Account.</p>
     <div class="codes" id="code-list"><div class="skeleton"></div><div class="skeleton"></div></div>
   </div>
 </section>
 
+<!-- ========== Updates ========== -->
 <section id="updates">
   <div class="wrap">
+    <div class="kicker reveal">Changelog</div>
     <h2 class="reveal">Updates</h2>
-    <p class="sub reveal">Was in den letzten Versionen neu ist – direkt aus dem Client-Changelog.</p>
+    <p class="sub reveal">Was in den letzten Versionen neu ist – direkt aus dem Client. Neue Versionen meldet der Client selbst mit einem Fenster
+      („Jetzt herunterladen“ / „Später“).</p>
     <div class="updates" id="update-list"><div class="skeleton"></div></div>
     <div style="text-align:center;margin-top:18px"><button class="btn" id="more-updates" hidden>Ältere Updates anzeigen</button></div>
   </div>
 </section>
 
-<section id="install">
+<!-- ========== Installation ========== -->
+<section id="install" class="alt">
   <div class="wrap">
+    <div class="kicker reveal">In 5 Minuten startklar</div>
     <h2 class="reveal">Installation</h2>
-    <p class="sub reveal">In ein paar Minuten startklar.</p>
+    <p class="sub reveal">Danach aktualisiert sich der Client selbst: Er fragt beim Öffnen des Menüs nach neuen Versionen und installiert sie nach deinem Klick.</p>
     <div class="steps">
       <div class="step reveal"><h3>Fabric installieren</h3><p>Den <a href="https://fabricmc.net/use/installer/" target="_blank" rel="noopener">Fabric-Installer</a> starten und Fabric Loader für <b id="mc-version">1.21.11</b> installieren.</p></div>
       <div class="step reveal"><h3>Fabric API holen</h3><p><a href="https://modrinth.com/mod/fabric-api/versions" target="_blank" rel="noopener">Fabric API</a> <span id="api-version"></span> herunterladen.</p></div>
       <div class="step reveal"><h3>GoonClient herunterladen</h3><p>Oben auf <b>Download</b> klicken und beide Dateien in den Ordner <code>.minecraft/mods</code> legen.</p></div>
-      <div class="step reveal"><h3>Spielen</h3><p>Minecraft mit dem Fabric-Profil starten, eine Welt betreten und <code>Right Shift</code> drücken.</p></div>
+      <div class="step reveal"><h3>Spielen</h3><p>Minecraft mit dem Fabric-Profil starten, eine Welt betreten und <kbd>Right Shift</kbd> drücken.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== FAQ ========== -->
+<section id="faq">
+  <div class="wrap">
+    <div class="kicker reveal">FAQ</div>
+    <h2 class="reveal">Häufige Fragen</h2>
+    <p class="sub reveal">Noch etwas unklar? Hier die Antworten auf das, was am häufigsten gefragt wird.</p>
+    <div class="faq">
+      <details class="reveal"><summary>Ist GoonClient kostenlos?</summary><p>Ja. Der Client, alle Module und der Free-Track des Battle Pass sind kostenlos. Goon Coins verdienst du nur durchs Spielen, mit der täglichen Belohnung, Missionen und Codes – es gibt nichts für echtes Geld.</p></details>
+      <details class="reveal"><summary>Ist das ein Cheat-Client?</summary><p>Nein. GoonClient ist ein Komfort- und PvP-Client wie andere bekannte Clients: Anzeigen, Optik, HUD und Cosmetics. Es gibt keine Module, die dir unfaire Vorteile verschaffen (kein Killaura, Fly o.Ä.). Prüfe trotzdem die Regeln des Servers, auf dem du spielst.</p></details>
+      <details class="reveal"><summary>Sehen andere Spieler meine Capes, Hüte und Emotes?</summary><p>Ja, alle anderen GoonClient-Spieler sehen sie auf jedem Server – dafür sorgt der Online-Sync über den GoonClient-Server. Spieler ohne GoonClient sehen ganz normales Minecraft.</p></details>
+      <details class="reveal"><summary>Wie bekomme ich Goon Coins?</summary><p>Aktiv spielen (1 Coin pro Minute, mit dem Coin Upgrader bis 10), tägliche Belohnung abholen, Missionen erledigen, Battle-Pass-Stufen abholen und Codes von dieser Seite einlösen. Freunde können dir auch Coins schenken.</p></details>
+      <details class="reveal"><summary>Was ist der Unterschied zwischen Free und Premium im Battle Pass?</summary><p>Beide Tracks haben 30 Stufen. Premium (1000 Goon Coins pro Season) gibt zusätzlich mehr Coins und mehr limitierte Cosmetics – in Season 1 fünf statt zwei, darunter das legendäre Synthwave-Cape. Gewonnene Items bleiben für immer.</p></details>
+      <details class="reveal"><summary>Brauche ich den Pack Mixer, um Texture Packs zu nutzen?</summary><p>Nein, normale Packs funktionieren wie immer. Der Pack Mixer ist für alle, die einzelne Teile aus mehreren Packs kombinieren wollen, z.B. Schwerter aus Pack A und Rüstung aus Pack B.</p></details>
+      <details class="reveal"><summary>Welche Minecraft-Version wird unterstützt?</summary><p>Minecraft <span class="mcv">1.21.11</span> mit Fabric Loader und Fabric API. Der eingebaute Updater installiert nur Versionen, die zu deiner Minecraft-Version passen.</p></details>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="cta-box reveal">
+      <h2>Bereit? <span class="grad">Lad dir GoonClient.</span></h2>
+      <p>Kostenlos, in wenigen Minuten installiert und mit eingebautem Updater.</p>
+      <a class="btn primary big" href="/download">⬇ Download <span id="dl-version-2"></span></a>
     </div>
   </div>
 </section>
@@ -209,37 +601,185 @@
 <div class="toast" id="toast">Code kopiert!</div>
 
 <script>
-  // ---------- Funktionen (bei neuen Client-Funktionen hier ergänzen; die Updates unten kommen automatisch) ----------
-  const FEATURES = [
-    ["sword", "PvP-Module", "Combat, Movement, Render, HUD und Utility – z.B. Custom Hitboxes, Block Highlight, Item Scale, Stretched Resolution (4:3), Armor Durability Overlay und Totem Tweaks."],
-    ["coin", "Goon Coins & Hourly Shop", "Coins fürs Spielen, jede Stunde 5 neue Items im Shop – je seltener, desto wertvoller. Mit Coin Upgrader bis 10 Coins pro Minute."],
-    ["cape", "Cosmetics für alle sichtbar", "Capes, Badges, animierte Namensschilder, Hüte, Flügel und Accessoires – andere GoonClient-Spieler sehen sie auf jedem Server."],
-    ["emote", "Emotes", "Dab, Levitate, Dance und mehr über das Emote-Rad – auch für deine Freunde sichtbar."],
-    ["friends", "Freunde", "Freundschaftsanfragen annehmen oder ablehnen und die Stats deiner Freunde ansehen: Coins, Capes, Badges."],
-    ["pack", "Pack Mixer", "Nimm das Schwert aus einem Texture Pack und die Spitzhacke aus einem anderen – mit Vorschau, Vanilla-Vergleich und Sounds."],
-    ["map", "Waypoints & Gadgets", "Wegpunkte, Taschenrechner, Session-Timer und weitere kleine Helfer direkt im Spiel."],
-    ["spark", "Themes & Animationen", "Saubere Oberfläche mit Animationen, animierten Icons und 10 Farb-Themes."]
-  ];
+  // ---------- Inhalte (bei neuen Client-Funktionen hier ergänzen; Codes und Updates kommen automatisch vom Server) ----------
   const ICONS = {
-    sword: '<path d="M14.5 3H21v6.5L10 20.5 6.5 17 17.5 6" /><path d="M5 15l4 4M3 21l3-3"/>',
+    sword: '<path d="M14.5 3H21v6.5L10 20.5 6.5 17 17.5 6"/><path d="M5 15l4 4M3 21l3-3"/>',
+    eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    hud: '<rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 8h4M7 12h7M15 15h2"/>',
+    tool: '<path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z"/>',
     coin: '<circle cx="12" cy="12" r="9"/><path d="M15 9.5h-4.5v5H15v-2.5h-2"/>',
     cape: '<path d="M7 3h10l2 18-7-3-7 3z"/>',
     emote: '<circle cx="12" cy="5" r="2"/><path d="M5 9l7 2 7-2M12 11v5l-4 5M12 16l4 5"/>',
     friends: '<circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 20c0-3.5 2.7-6 6-6s6 2.5 6 6M14 20c0-2.5 1.5-5 4-5s4 2.5 4 5"/>',
     pack: '<path d="M12 2l9 5-9 5-9-5z"/><path d="M3 12l9 5 9-5M3 17l9 5 9-5"/>',
     map: '<path d="M12 21s-7-6.2-7-11a7 7 0 0114 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>',
-    spark: '<path d="M12 2v6M12 16v6M2 12h6M16 12h6M5 5l3.5 3.5M15.5 15.5L19 19M5 19l3.5-3.5M15.5 8.5L19 5"/>'
+    spark: '<path d="M12 2v6M12 16v6M2 12h6M16 12h6M5 5l3.5 3.5M15.5 15.5L19 19M5 19l3.5-3.5M15.5 8.5L19 5"/>',
+    gift: '<rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8S10 3 7.5 4.5 9 8 12 8zM12 8s2-5 4.5-3.5S15 8 12 8z"/>',
+    star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+    heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.6-7 10-7 10z"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+    target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+    shirt: '<path d="M8 3l4 2 4-2 5 4-3 3-2-1v12H8V9l-2 1-3-3z"/>',
+    pumpkin: '<path d="M12 6c-5 0-8 3-8 7s3 7 8 7 8-3 8-7-3-7-8-7z"/><path d="M12 6c-1.5 3-1.5 11 0 14M12 6c1.5 3 1.5 11 0 14M12 6V3"/>',
+    update: '<path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+    key: '<circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L20 3M16 7l3 3M14 9l2 2"/>',
+    sound: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>',
+    calc: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    cross: '<path d="M12 3v6M12 15v6M3 12h6M15 12h6"/>'
   };
-  const grid = document.getElementById("feature-grid");
-  for (const [icon, title, text] of FEATURES) {
-    const el = document.createElement("div");
-    el.className = "card reveal";
-    el.innerHTML = '<div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-      + ICONS[icon] + '</svg></div><h3></h3><p></p>';
-    el.querySelector("h3").textContent = title;
-    el.querySelector("p").textContent = text;
-    grid.appendChild(el);
+  function svg(name) {
+    return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+      + (ICONS[name] || ICONS.spark) + '</svg>';
   }
+
+  // Überblick: die großen Bereiche des Menüs
+  const OVERVIEW = [
+    ["sword", "", "PvP- & Render-Module", "Custom Hitboxes, Block Highlight, Item Scale, Stretched Resolution, Motion Blur, Totem Tweaks und mehr.", "#modules"],
+    ["hud", "cyan", "HUD & Anzeigen", "FPS, CPS, Keystrokes, Koordinaten, Rüstung, Tränke, Inventar … frei verschiebbar im HUD-Editor.", "#modules"],
+    ["pack", "pink", "Pack Mixer", "Teile aus mehreren Texture Packs kombinieren – mit Vorschau, Vanilla-Vergleich und Sounds.", "#packmixer"],
+    ["star", "gold", "Battle Pass", "30 Stufen mit Free- und Premium-Track und limitierten Season-Cosmetics. Eigener Tab mit seitlicher Leiste.", "#economy"],
+    ["coin", "gold", "Goon Coins & Hourly Shop", "Coins fürs Spielen, jede Stunde 5 neue Items, Coin Upgrader bis 10 Coins pro Minute.", "#economy"],
+    ["cape", "pink", "Cosmetics", "Capes (auch animiert), Badges, animierte Nametags, 3D-Hüte, Flügel und Accessoires – für alle sichtbar.", "#economy"],
+    ["emote", "green", "Emotes", "Über 15 Emotes vom Wave bis zum Robot, über das Emote-Rad oder eine Taste – andere sehen sie mit.", "#social"],
+    ["friends", "green", "Freunde & Geschenke", "Freundschaftsanfragen, Freundes-Stats und Geschenke (Coins oder Items) an deine Freunde.", "#social"],
+    ["map", "cyan", "Waypoints & Gadgets", "Wegpunkte mit Strahl und Pfeil, Taschenrechner und Session-Timer direkt im Spiel.", "#modules"]
+  ];
+  const ov = document.getElementById("overview");
+  for (const [icon, color, title, text, href] of OVERVIEW) {
+    const a = document.createElement("a");
+    a.className = "card reveal";
+    a.href = href;
+    a.style.color = "inherit";
+    a.innerHTML = '<div class="ico ' + color + '">' + svg(icon) + '</div><h3></h3><p></p>';
+    a.querySelector("h3").textContent = title;
+    a.querySelector("p").textContent = text;
+    ov.appendChild(a);
+  }
+
+  // Alle Module (Name, Beschreibung, Icon) je Kategorie
+  const MODULES = {
+    "Render & PvP": [
+      ["eye", "Custom Hitboxes", "Zeigt die Hitboxen von Spielern und Mobs mit eigener Farbe, Linienbreite und Füllung – ohne F3+B."],
+      ["target", "Block Highlight", "Umrandet den Block, auf den du schaust, in deiner Farbe, Dicke und mit optionaler Füllung."],
+      ["tool", "Item Scale", "Macht die Items in deiner Hand und auf dem Boden kleiner oder größer."],
+      ["hud", "Stretched Resolution", "Spielt sich wie auf einem 4:3-Bildschirm (oder anderem Format): alles wirkt breiter."],
+      ["spark", "Motion Blur", "Weiche, nachziehende Bewegung durch Bild-Überblendung; Stärke einstellbar."],
+      ["eye", "Color Saturation", "Ändert Sättigung, Helligkeit und Kontrast des ganzen Bildes."],
+      ["cross", "Custom Crosshair", "Ersetzt das Fadenkreuz durch ein eigenes – im Crosshair-Editor Pixel für Pixel gezeichnet oder aus Presets."],
+      ["sword", "Hitcolor", "Wählt die Farbe, in der getroffene Spieler und Mobs aufleuchten."],
+      ["shirt", "Armor Durability Overlay", "Färbt deine Rüstung grün, gelb oder rot – je nachdem, wie viel Haltbarkeit noch übrig ist."],
+      ["heart", "Totem Tweaks", "Kleinerer Totem-Pop, kein Pop-Sound, weniger Partikel und ein Pop-Zähler im Chat."],
+      ["eye", "Free Look", "Frei umschauen (Taste halten), ohne die Blick- oder Laufrichtung zu ändern."]
+    ],
+    "HUD": [
+      ["hud", "FPS", "Zeigt deine aktuellen Bilder pro Sekunde."],
+      ["target", "CPS", "Zeigt deine Klicks pro Sekunde (links und rechts)."],
+      ["key", "Keystrokes", "Zeigt, welche Bewegungstasten und Maustasten du gerade drückst."],
+      ["map", "Coordinates", "Zeigt deine aktuelle XYZ-Position."],
+      ["cross", "Direction", "Zeigt die Himmelsrichtung, in die du schaust."],
+      ["map", "Biome", "Zeigt das Biom, in dem du gerade bist."],
+      ["calendar", "Day", "Zeigt den aktuellen Tag und die Uhrzeit im Spiel."],
+      ["hud", "Server IP", "Zeigt die Adresse des Servers, auf dem du spielst."],
+      ["clock", "TPS", "Schätzt die Ticks pro Sekunde des Servers (zeigt Lags)."],
+      ["shirt", "Armor", "Zeigt die Haltbarkeit deiner Rüstungsteile."],
+      ["spark", "Potion Effects", "Zeigt aktive Effekte mit Symbol, Stufe und Restzeit."],
+      ["pack", "Inventory", "Zeigt dein Inventar auf dem Bildschirm, ohne es zu öffnen."],
+      ["heart", "Totem Counter", "Zeigt, wie viele Totems der Unsterblichkeit du dabei hast."],
+      ["coin", "Goon Coins", "Zeigt dein Goon-Coins-Guthaben."],
+      ["hud", "Custom Text", "Zeigt einen Text deiner Wahl auf dem Bildschirm."]
+    ],
+    "Utility": [
+      ["tool", "Durability Viewer", "Zeigt die Haltbarkeit eines Items im Tooltip, wenn du mit der Maus darüberfährst."],
+      ["friends", "Friends", "Hebt deine Freunde hervor (Name, Chat, Tab-Liste). Verwalten im Friends-Tab oder mit /friend add, remove, list."],
+      ["map", "Waypoints", "Markierungen mit Strahl, Entfernung und Pfeil für deine gespeicherten Wegpunkte – verwaltet im Waypoints-Tab."],
+      ["emote", "Emotes", "Spielt deine Emotes über eine Taste oder das Emote-Rad (8 Plätze, frei belegbar)."]
+    ],
+    "Gadgets": [
+      ["calc", "Calculator", "Kleiner Taschenrechner mit Klammern, Prozent und Tastatur-Eingabe – direkt im Spiel."],
+      ["clock", "Session Timer", "Zählt, wie lange du schon spielst, solange er eingeschaltet ist."]
+    ],
+    "Menü & Client": [
+      ["search", "Suche", "Findet jedes Modul und Gadget über Name oder Beschreibung."],
+      ["hud", "HUD-Editor", "Alle HUD-Elemente mit der Maus verschieben und skalieren („Move HUD elements“)."],
+      ["spark", "Themes & Effekte", "Über 10 Farb-Themes (auch das Halloween-Theme mit Fledermäusen) und Effekte wie Glow, Pulse, Particles und Rainbow."],
+      ["sound", "UI-Sounds", "Dezente Klick- und Menü-Sounds, einzeln ein- und ausschaltbar."],
+      ["key", "Tasten & Größe", "Menü-Taste, Menü-Größe, Deckkraft und Animationen in den Settings einstellen."],
+      ["update", "Eingebauter Updater", "Prüft beim Öffnen des Menüs auf neue Versionen und zeigt ein Fenster mit „Jetzt herunterladen“ / „Später“; geprüft per Signatur."]
+    ]
+  };
+  const tabs = document.getElementById("mod-tabs");
+  const list = document.getElementById("mod-list");
+  function showMods(cat) {
+    list.innerHTML = "";
+    for (const [icon, name, text] of MODULES[cat]) {
+      const el = document.createElement("div");
+      el.className = "mod";
+      el.innerHTML = '<div class="dot">' + svg(icon) + '</div><div><h4></h4><p></p></div>';
+      el.querySelector("h4").textContent = name;
+      el.querySelector("p").textContent = text;
+      list.appendChild(el);
+    }
+    tabs.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.cat === cat));
+  }
+  Object.keys(MODULES).forEach((cat, i) => {
+    const b = document.createElement("button");
+    b.dataset.cat = cat;
+    b.setAttribute("role", "tab");
+    b.innerHTML = '<span></span><span class="n">' + MODULES[cat].length + '</span>';
+    b.firstChild.textContent = cat;
+    b.onclick = () => showMods(cat);
+    tabs.appendChild(b);
+  });
+  showMods(Object.keys(MODULES)[0]);
+
+  function fillGrid(id, items) {
+    const g = document.getElementById(id);
+    for (const [icon, color, title, text, bullets, tag] of items) {
+      const el = document.createElement("div");
+      el.className = "card reveal";
+      el.innerHTML = '<div class="ico ' + color + '">' + svg(icon) + '</div><h3></h3><p></p>';
+      el.querySelector("h3").textContent = title;
+      if (tag) el.querySelector("h3").insertAdjacentHTML("beforeend", ' <span class="tag ' + tag[1] + '">' + tag[0] + '</span>');
+      el.querySelector("p").textContent = text;
+      if (bullets && bullets.length) {
+        const ul = document.createElement("ul");
+        for (const b of bullets) { const li = document.createElement("li"); li.textContent = b; ul.appendChild(li); }
+        el.appendChild(ul);
+      }
+      g.appendChild(el);
+    }
+  }
+
+  fillGrid("economy-grid", [
+    ["coin", "gold", "Goon Coins", "1 Coin pro Minute aktiver Spielzeit. Der Fortschritt wird gespeichert und ist gegen Bearbeiten der Datei geschützt.",
+      ["Coin Upgrader: bis 10 Coins pro Minute", "AFK zählt nicht"]],
+    ["star", "gold", "Battle Pass", "Eigener Tab mit seitlich scrollender Leiste: oben Free, unten Premium, jede Stufe mit Coins oder einem limitierten Item.",
+      ["XP: +10 pro Minute, +100 tägliche Belohnung, +250 pro Mission", "Premium: 1000 Coins, mehr Coins und Cosmetics", "Season 1: Volt, Circuit, Robot, Data Cubes, Cyber Helmet, Circuit Wings, Synthwave"], ["Season 1", "new"]],
+    ["calendar", "", "Tägliche Belohnung", "Jeden Tag Coins abholen, die Woche steigert sich von 50 bis 600 Coins an Tag 7.",
+      ["Login-Streak – einen Tag verpasst = zurück auf Tag 1", "Erinnerung beim Betreten einer Welt"]],
+    ["target", "green", "Missionen & Erfolge", "23 Ziele wie „1 Stunde spielen“, „10 Items freischalten“ oder „100 Emotes“ – jedes mit Coin-Belohnung.",
+      ["Fortschrittsbalken für jede Mission", "„Claim all“ holt alles auf einmal ab"]],
+    ["coin", "gold", "Hourly Shop", "Jede Stunde 5 neue Items; Seltenheit bestimmt, wie oft ein Item auftaucht.",
+      ["Common, Uncommon, Rare, Epic, Legendary", "Live-Vorschau vor dem Kauf"]],
+    ["pumpkin", "", "Event-Shops", "Zeitlich begrenzte Shops mit eigener Währung und limitierten Items, z.B. der Halloween Shop mit Halloween Coins.",
+      ["Countdown bis zum Ende", "Neue Events ohne Client-Update"]],
+    ["heart", "pink", "Wunschliste", "Markiere Items, die du noch nicht hast – sobald eins im Hourly Shop auftaucht, bekommst du eine Meldung.", null],
+    ["shirt", "cyan", "Outfits", "Speichere bis zu 8 Kombinationen aus Cape, Hut, Flügeln, Accessoire, Nametag und Badge und wechsle mit einem Klick.", null],
+    ["cape", "pink", "Inventar & Anpassen", "Alles, was dir gehört, nach Kategorie und Seltenheit – mit Ausrüsten, Emote-Rad und Feineinstellungen für Capes, Badges und Nametags.", null]
+  ]);
+
+  fillGrid("social-grid", [
+    ["friends", "green", "Freunde", "Spieler über den Namen, aus dem Chat (Rechtsklick) oder in der Nähe hinzufügen. Freunde werden im Spiel, im Chat und in der Tab-Liste hervorgehoben.",
+      ["Freundschaftsanfragen annehmen oder ablehnen", "Freunde gehen nicht verloren: der Client stellt sie selbst wieder her"]],
+    ["hud", "cyan", "Freundes-Stats", "Sieh dir Coins, Spielzeit, gekaufte Items und das, was deine Freunde gerade tragen, an.", null],
+    ["gift", "pink", "Geschenke", "Schick Freunden 100 bis 5000 Goon Coins oder ein Item aus dem aktuellen Hourly Shop – auch wenn sie gerade offline sind.",
+      ["Zustellung kann nicht verloren gehen", "Meldung beim Empfang und beim Absender"]],
+    ["emote", "green", "Emotes für alle", "Deine Emotes sehen alle GoonClient-Spieler in der Nähe – von Wave, Dab und Dance bis zu Levitate und Robot.", null],
+    ["cape", "", "Cosmetics-Sync", "Capes, Badges, Nametags, Hüte, Flügel und Accessoires werden über den GoonClient-Server geteilt – auf jedem Minecraft-Server.", null],
+    ["star", "gold", "Animierte Namen im Chat", "Dein animiertes Nametag und Badge erscheinen auch im Chat neben deinem Namen.", null]
+  ]);
 
   // ---------- kleines Markdown für die Updates (Überschriften, Listen, Tabellen, fett, Code) ----------
   function esc(s) { return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
@@ -320,21 +860,20 @@
   function renderUpdates(showAll) {
     const box = document.getElementById("update-list");
     box.innerHTML = "";
-    const list = showAll ? allUpdates : allUpdates.slice(0, 6);
-    list.forEach((u, idx) => {
+    const shown = showAll ? allUpdates : allUpdates.slice(0, 6);
+    shown.forEach((u, idx) => {
       const d = document.createElement("details");
       d.className = "update";
       if (idx === 0) d.open = true;
       d.innerHTML = '<summary><span class="v"></span><span class="t"></span><span class="arrow">›</span></summary><div class="md"></div>';
       d.querySelector(".v").textContent = "v" + u.version;
       d.querySelector(".t").textContent = u.title || "Update";
-      if (idx === 0) d.querySelector(".t").insertAdjacentHTML("beforeend", ' <span class="pill latest-badge">neu</span>');
+      if (idx === 0) d.querySelector(".t").insertAdjacentHTML("beforeend", ' <span class="pill">neu</span>');
       d.querySelector(".md").innerHTML = markdown(u.body || "");
       box.appendChild(d);
     });
-    if (!list.length) box.innerHTML = '<div class="empty">Noch keine Updates veröffentlicht.</div>';
-    const more = document.getElementById("more-updates");
-    more.hidden = showAll || allUpdates.length <= 6;
+    if (!shown.length) box.innerHTML = '<div class="empty">Noch keine Updates veröffentlicht.</div>';
+    document.getElementById("more-updates").hidden = showAll || allUpdates.length <= 6;
   }
   document.getElementById("more-updates").onclick = () => renderUpdates(true);
 
@@ -345,13 +884,17 @@
       const s = await r.json();
       if (s.version) {
         document.getElementById("dl-version").textContent = "v" + s.version;
+        document.getElementById("dl-version-2").textContent = "v" + s.version;
         document.getElementById("footer-version").textContent = "Neueste Version: v" + s.version;
         const mb = s.size ? " · " + (s.size / 1048576).toFixed(1) + " MB" : "";
         const mc = (s.info && s.info.minecraft) || "1.21.11";
         document.getElementById("hero-meta").textContent = "Version " + s.version + " · Minecraft " + mc + " · Fabric" + mb + " · kostenlos";
       }
       if (s.info) {
-        if (s.info.minecraft) document.getElementById("mc-version").textContent = s.info.minecraft;
+        if (s.info.minecraft) {
+          document.getElementById("mc-version").textContent = s.info.minecraft;
+          document.querySelectorAll(".mcv").forEach(e => e.textContent = s.info.minecraft);
+        }
         if (s.info.fabricApi) document.getElementById("api-version").textContent = "(" + s.info.fabricApi + ")";
       }
       renderCodes(s.codes || []);
@@ -364,15 +907,37 @@
         setTimeout(() => load(attempt + 1), 4000);
       } else {
         document.getElementById("code-list").innerHTML = '<div class="empty">Codes konnten nicht geladen werden. Lade die Seite neu.</div>';
-        document.getElementById("update-list").innerHTML = "";
+        document.getElementById("update-list").innerHTML = '<div class="empty">Updates konnten nicht geladen werden.</div>';
       }
     }
   }
   load(0);
 
+  // ---------- Navigation: Menü am Handy, aktiver Abschnitt ----------
+  const navLinks = document.getElementById("nav-links");
+  document.getElementById("menu-btn").onclick = () => navLinks.classList.toggle("open");
+  navLinks.querySelectorAll("a").forEach(a => a.addEventListener("click", () => navLinks.classList.remove("open")));
+  if ("IntersectionObserver" in window) {
+    const byId = {};
+    navLinks.querySelectorAll("a").forEach(a => byId[a.getAttribute("href").slice(1)] = a);
+    const spy = new IntersectionObserver(es => es.forEach(e => {
+      if (e.isIntersecting && byId[e.target.id]) {
+        Object.values(byId).forEach(a => a.classList.remove("on"));
+        byId[e.target.id].classList.add("on");
+      }
+    }), { rootMargin: "-45% 0px -50% 0px" });
+    document.querySelectorAll("section[id]").forEach(s => spy.observe(s));
+  }
+
+  // kleine Animation im nachgebauten Menü: Schalter gehen an und aus
+  setInterval(() => {
+    document.getElementById("mock-t1").classList.toggle("on");
+    document.getElementById("mock-t2").classList.toggle("on");
+  }, 2200);
+
   // sanftes Einblenden beim Scrollen (ohne IntersectionObserver sofort alles zeigen)
   if ("IntersectionObserver" in window) {
-    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { threshold: .12 });
+    const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { threshold: .1 });
     document.querySelectorAll(".reveal").forEach(el => io.observe(el));
   } else {
     document.querySelectorAll(".reveal").forEach(el => el.classList.add("in"));
