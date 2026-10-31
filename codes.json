@@ -30,7 +30,9 @@
       "id": "halloween2026",
       "hash": "aa2e4a7d717f156f2e70be848487b5ba7aff40d4891563a9b3b5375b02386816",
       "coins": 2000,
-      "expires": "2026-11-06"
+      "expires": "2026-11-06",
+      "public": true,
+      "code": "GOON-HALLOWEEN-2026"
     }
   ]
 }
