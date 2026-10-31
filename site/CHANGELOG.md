@@ -450,6 +450,25 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
 - **Server-Routen:** `/` (Seite), `/download` (neueste JAR), `/v1/site` (Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.45.0: Limitierter Halloween Shop mit Halloween Coins
+
+- **Neue limitierte Währung "Halloween Coins":** Während des Events gibt es pro Minute aktiver Spielzeit zusätzlich
+  3 Halloween Coins (unabhängig vom Coin Upgrader, AFK zählt nicht). Sie sind wie die Goon Coins gegen Bearbeiten der Datei
+  geschützt.
+- **Neuer Tab "Halloween Shop"** (mit Kürbis-Icon, nur während des Events sichtbar): Halloween-Coins-Guthaben, ein
+  **Countdown** (Tage, Stunden, Minuten, Sekunden) und das Ablaufdatum. Der Shop verschwindet am **7. November 2026 um
+  00:00 Uhr** (deutsche Zeit). Im Hourly Shop führt ein Banner mit Restzeit direkt dorthin.
+- **15 limitierte Items** (nur mit Halloween Coins, nie im Hourly Shop):
+  - Hüte: Reaper Hood (dunkle Kapuze mit roten Augen), Jack-o'-Lantern (leuchtender geschnitzter Kürbis).
+  - Flügel: Skeleton Wings (aus Knochen), Vampire Wings (rote Fledermausflügel mit leuchtenden Kanten).
+  - Accessoires: Vampire Fangs, Spider Buddy (Spinne auf dem Kopf), Orbiting Ghosts (Legendary, drei kleine Geister kreisen).
+  - Capes (animiert): Lantern (Kürbisgesicht mit flackernder Kerze), Haunted (Geister steigen durch die Nacht auf).
+  - Badges: R.I.P. (pulsierend), BOO! (flackert orange und lila).
+  - Nametags: Spooky (orange und lila, mit Flackern), Haunted (Buchstaben verblassen wie Geister).
+  - Emotes: Zombie Walk, Boo! (zusammenkauern und hochspringen).
+- Gekaufte Halloween-Items bleiben für immer im Inventar (dort mit "Limited Halloween 2026 item" markiert).
+- Server: die zwei neuen Emotes sind freigeschaltet (dafür `server.py` neu hochladen).
+
 ## Update 3.44.0: 49 neue Shop-Items
 
 - **8 neue Emotes** (schlicht und sauber animiert): Thumbs Up, Point, Shrug, Clap, Think, Facepalm, Bow, Cheer.

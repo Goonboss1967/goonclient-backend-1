@@ -500,7 +500,9 @@ def code_expired(entry):
 EMOTE_IDS = {"wave", "dance", "flex", "dab", "salute", "spin", "orangejustice", "levitate",
              "laugh", "heart", "cry", "celebrate",
              # 3.44.0
-             "thumbsup", "point", "shrug", "clap", "think", "facepalm", "bow", "cheer"}
+             "thumbsup", "point", "shrug", "clap", "think", "facepalm", "bow", "cheer",
+             # 3.45.0 (Halloween, limitiert)
+             "zombie", "boo"}
 EMOTE_TTL = 8.0  # so lange bleibt ein Emote abrufbar (Sekunden)
 
 
