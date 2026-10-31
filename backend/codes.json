@@ -1,0 +1,30 @@
+{
+  "codes": [
+    {
+      "id": "launch100",
+      "hash": "819668148b8635483a9b2aca2d71d7502c694924d238a095be2171859fc4feda",
+      "coins": 100,
+      "public": true,
+      "code": "GOON-9GAT-ZTY7"
+    },
+    {
+      "id": "bonus3000",
+      "hash": "45c00347cc35b8e6880fe3ec4ace5e74994351e42c1050838335abd20edd7851",
+      "coins": 3000
+    },
+    {
+      "id": "hourly1000",
+      "hash": "61fe062875f98cc2680dfc2b9671e6dca9d087ffa2d1be9d0e95e2db5f6ba316",
+      "coins": 1000,
+      "public": true,
+      "code": "GOON-HOURLY-1000"
+    },
+    {
+      "id": "upgrade1250",
+      "hash": "b288bcb80a527109f19b3d96c1f3c27a7813f17d4c1525627821874f167a5919",
+      "coins": 1250,
+      "public": true,
+      "code": "GOON-UPGRADE-1250"
+    }
+  ]
+}
