@@ -32,6 +32,11 @@ Schnittstelle (alles JSON):
   POST /v1/friends/remove   {"uuid"}       -> {"status": "removed"}
   PUT  /v1/stats            {"coins", "earned", "playSeconds", "owned": [item-ids]}
   GET  /v1/friends/profile?uuid=<uuid>     -> Stats + Cosmetics, nur für bestätigte Freunde (sonst 403)
+  Website (Ordner site/ neben server.py):
+  GET  /                                   -> die Website (site/index.html)
+  GET  /download                           -> die neueste Client-JAR aus site/downloads/
+  GET  /v1/site                            -> {"version", "file", "size", "updates": [...], "info", "codes": [...]}
+                                              (codes = in codes.json als "public" markierte Codes, nicht abgelaufen)
 """
 import argparse
 import hashlib
@@ -327,10 +332,19 @@ class Codes:
                 print("codes.json: invalid entry skipped: %r" % (c,))
                 continue
             max_uses = c.get("maxUses")
+            public_code = c.get("code") if c.get("public") is True and isinstance(c.get("code"), str) \
+                and hash_code(normalize_code(c.get("code"))) == h else None  # nur zeigen, wenn Klartext und Hash passen
             table[h] = {"id": cid, "coins": coins,
                         "maxUses": max_uses if isinstance(max_uses, int) and max_uses > 0 else None,
-                        "expires": c.get("expires") if isinstance(c.get("expires"), str) else None}
+                        "expires": c.get("expires") if isinstance(c.get("expires"), str) else None,
+                        "public": public_code}
         self.by_hash, self.mtime = table, mtime
+
+    def public(self):
+        """Codes, die auf der Website stehen sollen (mit Klartext), in der Reihenfolge von codes.json."""
+        with self.lock:
+            self._reload()
+            return [e for e in self.by_hash.values() if e.get("public")]
 
     def find(self, text):
         normalized = normalize_code(text) if isinstance(text, str) else ""
@@ -339,6 +353,91 @@ class Codes:
         with self.lock:
             self._reload()
             return self.by_hash.get(hash_code(normalized))
+
+
+class Site:
+    """
+    Die Website (Ordner site/ neben server.py): index.html, die neueste Client-JAR in site/downloads/ und CHANGELOG.md
+    (eine Kopie der README des Clients). Beides legt der Gradle-Build nach jedem Bauen automatisch dort ab; damit ist die
+    Website nach dem Hochladen immer auf dem Stand der neuesten Client-Version.
+    """
+
+    JAR_RE = re.compile(r"^goonclient-(\d+)\.(\d+)\.(\d+)\.jar$")
+
+    def __init__(self, folder):
+        self.folder = folder
+        self.lock = threading.Lock()
+        self.cache = {}  # Pfad -> (mtime, Inhalt)
+
+    def _read(self, path):
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            return None
+        with self.lock:
+            hit = self.cache.get(path)
+            if hit and hit[0] == mtime:
+                return hit[1]
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+        except OSError:
+            return None
+        with self.lock:
+            self.cache[path] = (mtime, data)
+        return data
+
+    def index(self):
+        return self._read(os.path.join(self.folder, "index.html"))
+
+    def latest_jar(self):
+        """(Dateiname, Version) der neuesten JAR in site/downloads, oder (None, None)."""
+        best = None
+        folder = os.path.join(self.folder, "downloads")
+        try:
+            names = os.listdir(folder)
+        except OSError:
+            return None, None
+        for n in names:
+            m = self.JAR_RE.match(n)
+            if m:
+                v = tuple(int(x) for x in m.groups())
+                if best is None or v > best[1]:
+                    best = (n, v)
+        if best is None:
+            return None, None
+        return best[0], "%d.%d.%d" % best[1]
+
+    def jar_bytes(self, name):
+        return self._read(os.path.join(self.folder, "downloads", name))
+
+    def changelog(self, limit=40):
+        """Die "## Update x.y.z: Titel"-Abschnitte aus CHANGELOG.md, neueste zuerst."""
+        raw = self._read(os.path.join(self.folder, "CHANGELOG.md"))
+        if not raw:
+            return [], {}
+        text = raw.decode("utf-8", "replace")
+        entries = []
+        current = None
+        for line in text.splitlines():
+            m = re.match(r"^## Update (\d+\.\d+\.\d+)\s*[:\-–]?\s*(.*)$", line)
+            if m:
+                current = {"version": m.group(1), "title": m.group(2).strip(), "body": []}
+                entries.append(current)
+            elif line.startswith("## ") or line.startswith("# "):
+                current = None
+            elif current is not None:
+                current["body"].append(line)
+        for e in entries:
+            e["body"] = "\n".join(e["body"]).strip()
+        entries.sort(key=lambda e: tuple(int(x) for x in e["version"].split(".")), reverse=True)
+        # Versionen aus der Tabelle oben (Minecraft, Fabric API)
+        info = {}
+        for key, label in (("minecraft", "Minecraft"), ("fabricApi", "Fabric API"), ("fabricLoader", "Fabric Loader")):
+            m = re.search(r"^\|\s*" + re.escape(label) + r"\s*\|\s*([^|]+?)\s*\|", text, re.MULTILINE)
+            if m:
+                info[key] = m.group(1).strip()
+        return entries[:limit], info
 
 
 def code_expired(entry):
@@ -414,6 +513,7 @@ class State:
         self.limiter = RateLimiter()
         self.emotes = Emotes()
         self.codes = Codes(args.codes)
+        self.site = Site(args.site)
         self.lock = threading.Lock()
         self.challenges = {}   # serverId -> Ablaufzeit
         self.tokens = {}       # token -> (uuid, Ablaufzeit)
@@ -494,6 +594,62 @@ def make_handler(state):
         def error(self, code, message):
             self.send_json(code, {"error": message})
 
+        def send_bytes(self, data, content_type, extra=None):
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            for k, v in (extra or {}).items():
+                self.send_header(k, v)
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(data)
+
+        # ---------- Website ----------
+
+        def site_route(self, path):
+            """Website, Download und Website-Daten. Gibt False zurück, wenn der Pfad nicht dazugehört."""
+            if path in ("/", "/index.html"):
+                html = state.site.index()
+                if html is None:
+                    self.error(404, "website not installed (site/index.html missing)")
+                else:
+                    self.send_bytes(html, "text/html; charset=utf-8", {"Cache-Control": "no-cache"})
+                return True
+            if path == "/download":
+                if not self.guard("download", 30):
+                    return True
+                name, version = state.site.latest_jar()
+                data = state.site.jar_bytes(name) if name else None
+                if data is None:
+                    self.error(404, "no client build available yet")
+                else:
+                    self.send_bytes(data, "application/java-archive",
+                                    {"Content-Disposition": 'attachment; filename="%s"' % name, "Cache-Control": "no-cache"})
+                return True
+            if path == "/v1/site":
+                if not self.guard("site", 120):
+                    return True
+                name, version = state.site.latest_jar()
+                updates, info = state.site.changelog()
+                codes = []
+                for e in state.codes.public():
+                    used = state.store.claim_count(e["id"])
+                    left = None if e["maxUses"] is None else max(0, e["maxUses"] - used)
+                    if code_expired(e) or left == 0:
+                        continue  # abgelaufene oder aufgebrauchte Codes nicht mehr zeigen
+                    codes.append({"code": e["public"], "coins": e["coins"], "expires": e["expires"], "usesLeft": left,
+                                  "redeemed": used})
+                size = len(state.site.jar_bytes(name) or b"") if name else 0
+                self.send_json(200, {"version": version, "file": name, "size": size, "updates": updates,
+                                     "info": info, "codes": codes})
+                return True
+            return False
+
+        def do_HEAD(self):
+            parsed = urllib.parse.urlparse(self.path)
+            if not self.site_route(parsed.path):
+                self.error(404, "not found")
+
         def read_json(self):
             length = int(self.headers.get("Content-Length", "0") or 0)
             if length < 0 or length > MAX_BODY:
@@ -520,6 +676,8 @@ def make_handler(state):
             try:
                 if parsed.path == "/v1/health":
                     return self.send_json(200, {"ok": True})
+                if self.site_route(parsed.path):
+                    return
                 if parsed.path == "/v1/cosmetics":
                     if not self.guard("read", 240):
                         return
@@ -673,6 +831,8 @@ def main():
     p.add_argument("--db", default="goonclient.db")
     p.add_argument("--codes", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "codes.json"),
                    help="Datei mit den einlösbaren Codes (Standard: codes.json neben server.py)")
+    p.add_argument("--site", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "site"),
+                   help="Ordner der Website (Standard: site/ neben server.py)")
     p.add_argument("--mojang", default="https://sessionserver.mojang.com", help="Basis-URL des Mojang Session-Servers")
     p.add_argument("--insecure", action="store_true", help="Mojang-Prüfung abschalten (NUR für lokale Tests)")
     p.add_argument("--trust-proxy", action="store_true", help="X-Forwarded-For eines Reverse-Proxys für das Rate-Limit nutzen")
