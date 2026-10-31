@@ -450,6 +450,67 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
 - **Server-Routen:** `/` (Seite), `/download` (neueste JAR), `/v1/site` (Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.41.0: Armor Durability Overlay und Totem Tweaks
+
+Zwei neue Module (Kategorie **Render**):
+
+- **Armor Durability Overlay:** Rüstung bekommt überall in Hotbar, Inventar, Truhen und Armor-HUD einen farbigen Rahmen:
+  **Grün** = (fast) voll, **Gelb** = mittel, **Rot** = fast kaputt.
+  - Stil: Rahmen, Hintergrund oder beides; Rahmendicke 1–2, Deckkraft.
+  - "Smooth colors" lässt die Farbe fließend von Grün über Gelb nach Rot wechseln.
+  - Grenzen einstellbar ("Yellow below", "Red below"); auf Wunsch auch für Werkzeuge und Waffen.
+- **Totem Tweaks:**
+  - **Kleinerer Totem-Pop:** Die Totem-Animation in der Bildschirmmitte ist kleiner (10–100 %, Standard 50 %) oder ganz aus.
+  - **Kein Pop-Sound:** Sound stumm schalten oder leiser machen.
+  - **Partikel:** 0–200 % (0 = keine Partikel).
+  - **Pop-Nachrichten:** Im Chat steht, wenn ein Spieler ein Totem verbraucht, mit Zähler und seinen Leben, z.B.
+    "Steve popped 3 totems (6 HP)". Der Zähler beginnt nach dem Tod oder in einer neuen Welt von vorne. Eigene Pops nur auf Wunsch.
+
+## Update 3.40.0: Item Scale mit Item-Liste
+
+- **Item Scale – eigene Größe pro Item:** In den Einstellungen von Item Scale gibt es den Knopf **"Item list"**. Er öffnet eine
+  Liste mit allen Items und Blöcken (alles, was man droppen kann):
+  - Suche nach Name oder ID (z.B. "crystal"), Filter **"Changed only"** zeigt nur Items mit eigener Größe.
+  - Klick auf ein Item: große Vorschau, Regler **10–1000 %**, Schnellknöpfe (50, 100, 200, 400, 800, 1000 %) und "Reset".
+  - Die eigene Größe gilt, wenn das Item auf dem Boden liegt, und hat Vorrang vor "Dropped items size".
+  - **End-Kristall:** Die Größe gilt auch für **platzierte** End-Kristalle.
+- **"Dropped items size"** geht jetzt bis **1000 %** (vorher 300 %).
+
+## Update 3.39.0: Block Highlight weich, Boden-Items, Modul-Icons
+
+- **Block Highlight:**
+  - **Fix:** Die Füllung ("Filled" und "Outline + Fill") hat geflackert und Streifen gezeigt, weil sie genau auf der Blockoberfläche
+    lag. Sie liegt jetzt ein winziges Stück davor; das Flackern ist weg.
+  - **Weicher Übergang:** Schaust du zu einem anderen Block, gleitet die Hervorhebung zum neuen Block, statt zu springen.
+    Einstellbar: "Smooth transition" (an/aus) und "Transition speed".
+- **Item Scale:** neue Einstellung **"Dropped items size"** für die Größe von Items, die auf dem Boden liegen (25–300 %).
+- **Icons für alle Module:** Jede Modul-Karte (Render, HUD, Utility, Misc, Movement und die Gadgets) hat links ein eigenes
+  Pixel-Icon, z.B. Monitor für FPS, Truhe für Inventar, Sanduhr für TPS, Würfel für Hitboxes, Pfeile für Stretched. Das Icon
+  leuchtet, wenn das Modul an ist, und bewegt sich beim Hovern.
+
+## Update 3.38.0: Block Highlight, Item Scale, Stretched Resolution
+
+Drei neue Module (Kategorie **Render**):
+
+- **Block Highlight:** der Rahmen um den anvisierten Block in eigener Farbe und Dicke statt dünn und schwarz.
+  - Stil: nur Rahmen, nur Füllung oder beides; Füllfarbe und Deckkraft getrennt einstellbar.
+  - Linienstärke 1–8, Regenbogen-Modus mit Geschwindigkeit, "Expand" für einen etwas größeren Rahmen.
+  - Die Form folgt dem echten Block (Stufen, Halbblöcke, Zäune ...). Mit "Full block box" ist es immer ein ganzer Würfel.
+- **Item Scale:** Items in der Hand (Ego-Ansicht) kleiner oder größer (20–200 %) und verschiebbar (X/Y/Z). Die Nebenhand
+  (z.B. Totem, Schild) wie die Haupthand oder mit eigener Größe.
+- **Stretched Resolution:** Die Spielwelt wird wie auf einem 4:3-Bildschirm gezeichnet und auf die volle Breite gestreckt. Alles
+  wirkt breiter, Gegner sind breiter.
+  - Zur Wahl: 4:3, 5:4, 3:2, 16:10, 1:1 oder ein eigenes Verhältnis; "Strength" für eine teilweise Streckung.
+  - Menüs, Chat und HUD bleiben normal.
+
+## Update 3.37.0: Kein automatischer Stern mehr
+
+- **Fix:** Jeder GoonClient-Spieler hatte ungewollt einen **★ neben dem Namen**, den alle anderen GoonClient-Nutzer sahen. Grund:
+  Das Namens-Badge war standardmäßig eingeschaltet, und der erste Stil ist der kostenlose Starter-Stern.
+- Das Badge ist jetzt **standardmäßig aus**. Beim ersten Start mit 3.37.0 wird es bei allen einmal ausgeschaltet. Wer ein Badge
+  möchte, rüstet es im **Inventar** neu aus und behält es dann.
+- Spieler, die noch eine ältere Version benutzen, schicken den Stern weiter, bis sie updaten.
+
 ## Update 3.36.0: Pack Mixer – Sounds gehören zum Teil
 
 - Das eigene Abteil "Sounds" ist wieder weg. Sounds aus einem Pack gehören jetzt **direkt zu ihrem Teil**: Wer z.B. die Armbrust aus
