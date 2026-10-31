@@ -273,6 +273,13 @@
   footer { border-top: 1px solid var(--line); padding: 30px 0 40px; color: var(--faint); font-size: 14px; }
   footer .wrap { display: flex; gap: 14px; flex-wrap: wrap; justify-content: space-between; }
 
+  .dls { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
+  .dl { position: relative; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--radius); padding: 24px; display: flex; flex-direction: column; gap: 10px; }
+  .dl.newest { border-color: rgba(255, 255, 255, .35); box-shadow: 0 16px 40px rgba(0, 0, 0, .4); }
+  .dl-mc { font-size: 24px; font-weight: 800; letter-spacing: -.5px; }
+  .dl-meta { color: var(--dim); font-size: 14px; }
+  .dl .tag { position: absolute; top: 18px; right: 18px; margin: 0; }
+  .dl .btn { margin-top: 6px; }
   .toast { position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 30px); background: var(--green); color: #0a0a0a; font-weight: 700;
     padding: 10px 18px; border-radius: 10px; opacity: 0; transition: .25s; pointer-events: none; z-index: 40; }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
@@ -324,7 +331,7 @@
       <a href="#updates">Updates</a>
       <a href="#install">Installation</a>
     </div>
-    <a class="btn primary" href="/download">Download</a>
+    <a class="btn primary" href="#download">Download</a>
     <button class="menu-btn" id="menu-btn" aria-label="Menü">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
     </button>
@@ -340,7 +347,7 @@
         <p class="lead">GoonClient ist der kostenlose Fabric-Client für Minecraft&nbsp;1.21.11: über 30 PvP- und HUD-Module, ein Pack Mixer
           für deine Texture Packs, Goon Coins mit Hourly Shop und Battle Pass, Capes, Hüte und Emotes, die andere Spieler sehen, und Freunde.</p>
         <div class="cta">
-          <a class="btn primary big" href="/download">⬇ Download <span id="dl-version"></span></a>
+          <a class="btn primary big" href="#download">⬇ Download <span id="dl-version"></span></a>
           <a class="btn big" href="#features">Alle Funktionen</a>
         </div>
         <div class="meta" id="hero-meta">Minecraft 1.21.11 · Fabric · kostenlos</div>
@@ -392,6 +399,18 @@
     </div>
   </div>
 </header>
+
+<!-- ========== Download (eine Karte je Minecraft-Version, vom Server) ========== -->
+<section id="download" style="padding-top:20px">
+  <div class="wrap">
+    <div class="kicker reveal">Download</div>
+    <h2 class="reveal">Hol dir den GoonClient</h2>
+    <p class="sub reveal">Kostenlos, signiert und mit eingebautem Updater. Danach kommen neue Versionen automatisch.</p>
+    <div class="dls" id="dl-list">
+      <div class="dl reveal"><div class="dl-mc">Minecraft 1.21.11</div><a class="btn primary big" href="/download">⬇ Download</a></div>
+    </div>
+  </div>
+</section>
 
 <!-- ========== Überblick ========== -->
 <section id="features">
@@ -557,9 +576,9 @@
     <h2 class="reveal">Installation</h2>
     <p class="sub reveal">Danach aktualisiert sich der Client selbst: Er fragt beim Öffnen des Menüs nach neuen Versionen und installiert sie nach deinem Klick.</p>
     <div class="steps">
-      <div class="step reveal"><h3>Fabric installieren</h3><p>Den <a href="https://fabricmc.net/use/installer/" target="_blank" rel="noopener">Fabric-Installer</a> starten und Fabric Loader für <b id="mc-version">1.21.11</b> installieren.</p></div>
-      <div class="step reveal"><h3>Fabric API holen</h3><p><a href="https://modrinth.com/mod/fabric-api/versions" target="_blank" rel="noopener">Fabric API</a> <span id="api-version"></span> herunterladen.</p></div>
-      <div class="step reveal"><h3>GoonClient herunterladen</h3><p>Oben auf <b>Download</b> klicken und beide Dateien in den Ordner <code>.minecraft/mods</code> legen.</p></div>
+      <div class="step reveal"><h3>Fabric installieren</h3><p>Den <a href="https://fabricmc.net/use/installer/" target="_blank" rel="noopener">Fabric-Installer</a> starten und Fabric Loader für Minecraft <b id="mc-version">1.21.11</b> installieren.</p></div>
+      <div class="step reveal"><h3>Fabric API holen</h3><p><a href="https://modrinth.com/mod/fabric-api/versions" target="_blank" rel="noopener">Fabric API</a> für dieselbe Minecraft-Version herunterladen.</p></div>
+      <div class="step reveal"><h3>GoonClient herunterladen</h3><p>Oben bei <b>Download</b> die JAR laden und beide Dateien (GoonClient und Fabric API) in <code>.minecraft/mods</code> legen.</p></div>
       <div class="step reveal"><h3>Spielen</h3><p>Minecraft mit dem Fabric-Profil starten, eine Welt betreten und <kbd>Right Shift</kbd> drücken.</p></div>
     </div>
   </div>
@@ -588,7 +607,7 @@
     <div class="cta-box reveal">
       <h2>Bereit? <span class="grad">Hol dir den GoonClient.</span></h2>
       <p>Kostenlos, in wenigen Minuten installiert und mit eingebautem Updater.</p>
-      <a class="btn primary big" href="/download">⬇ Download <span id="dl-version-2"></span></a>
+      <a class="btn primary big" href="#download">⬇ Download <span id="dl-version-2"></span></a>
     </div>
   </div>
 </section>
@@ -834,6 +853,25 @@
     t.textContent = msg; t.classList.add("show");
     clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 1600);
   }
+  function renderDownloads(list) {
+    if (!list.length) return;
+    const box = document.getElementById("dl-list");
+    box.innerHTML = "";
+    list.forEach((d, i) => {
+      const el = document.createElement("div");
+      el.className = "dl reveal in" + (i === 0 ? " newest" : "");
+      el.innerHTML = (i === 0 ? '<span class="tag new">Neueste</span>' : "")
+        + '<div class="dl-mc"></div><div class="dl-meta"></div><a class="btn big"></a>';
+      el.querySelector(".dl-mc").textContent = "Minecraft " + d.minecraft;
+      el.querySelector(".dl-meta").textContent = "GoonClient v" + d.version + " · Fabric · " + (d.size / 1048576).toFixed(1) + " MB"
+        + (d.minecraft.startsWith("26.") ? " · braucht Java 25" : " · Java 21");
+      const a = el.querySelector("a");
+      a.href = d.url;
+      a.className = "btn big" + (i === 0 ? " primary" : "");
+      a.textContent = "⬇ Download für " + d.minecraft;
+      box.appendChild(el);
+    });
+  }
   function renderCodes(codes) {
     const box = document.getElementById("code-list");
     box.innerHTML = "";
@@ -885,19 +923,16 @@
       if (!r.ok) throw new Error(r.status);
       const s = await r.json();
       if (s.version) {
+        renderDownloads(s.downloads || []);
         document.getElementById("dl-version").textContent = "v" + s.version;
         document.getElementById("dl-version-2").textContent = "v" + s.version;
         document.getElementById("footer-version").textContent = "Neueste Version: v" + s.version;
         const mb = s.size ? " · " + (s.size / 1048576).toFixed(1) + " MB" : "";
-        const mc = (s.info && s.info.minecraft) || "1.21.11";
-        document.getElementById("hero-meta").textContent = "Version " + s.version + " · Minecraft " + mc + " · Fabric" + mb + " · kostenlos";
-      }
-      if (s.info) {
-        if (s.info.minecraft) {
-          document.getElementById("mc-version").textContent = s.info.minecraft;
-          document.querySelectorAll(".mcv").forEach(e => e.textContent = s.info.minecraft);
-        }
-        if (s.info.fabricApi) document.getElementById("api-version").textContent = "(" + s.info.fabricApi + ")";
+        const mcs = (s.downloads || []).map(d => d.minecraft);
+        const mc = mcs.length ? mcs.join(" & ") : ((s.info && s.info.minecraft) || "1.21.11");
+        document.getElementById("hero-meta").textContent = "Version " + s.version + " · Minecraft " + mc + " · Fabric · kostenlos";
+        document.getElementById("mc-version").textContent = mc.replace(" & ", " oder ");
+        document.querySelectorAll(".mcv").forEach(e => e.textContent = mc.replace(" & ", " und "));
       }
       renderCodes(s.codes || []);
       allUpdates = s.updates || [];

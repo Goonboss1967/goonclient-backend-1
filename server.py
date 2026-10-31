@@ -412,7 +412,10 @@ class Site:
     Website nach dem Hochladen immer auf dem Stand der neuesten Client-Version.
     """
 
-    JAR_RE = re.compile(r"^goonclient-(\d+)\.(\d+)\.(\d+)\.jar$")
+    # goonclient-x.y.z.jar = Haupt-Version (Minecraft laut CHANGELOG), goonclient-x.y.z-mc26.1.2.jar = für eine andere
+    # Minecraft-Version (eigenes Projekt GoonClient-26.1.2). Website und Updater bieten jede Version passend an.
+    JAR_RE = re.compile(r"^goonclient-(\d+)\.(\d+)\.(\d+)(?:-mc(\d+(?:\.\d+){1,3}))?\.jar$")
+    MC_RE = re.compile(r"^\d+(?:\.\d+){1,3}$")
 
     def __init__(self, folder):
         self.folder = folder
@@ -440,23 +443,49 @@ class Site:
     def index(self):
         return self._read(os.path.join(self.folder, "index.html"))
 
-    def latest_jar(self):
-        """(Dateiname, Version) der neuesten JAR in site/downloads, oder (None, None)."""
-        best = None
+    def default_minecraft(self):
+        """Minecraft-Version der Haupt-JAR (ohne -mc im Namen), aus dem CHANGELOG."""
+        return self.changelog(limit=1)[1].get("minecraft") or "1.21.11"
+
+    def _jars(self):
+        """Alle JARs in site/downloads: [(Dateiname, (x, y, z), Minecraft-Version)]."""
         folder = os.path.join(self.folder, "downloads")
         try:
             names = os.listdir(folder)
         except OSError:
-            return None, None
+            return []
+        default = None
+        out = []
         for n in names:
             m = self.JAR_RE.match(n)
             if m:
-                v = tuple(int(x) for x in m.groups())
-                if best is None or v > best[1]:
-                    best = (n, v)
+                if m.group(4) is None and default is None:
+                    default = self.default_minecraft()
+                out.append((n, tuple(int(x) for x in m.groups()[:3]), m.group(4) or default))
+        return out
+
+    def latest_jar(self, mc=None):
+        """(Dateiname, Version) der neuesten JAR für diese Minecraft-Version (None = Haupt-Version), oder (None, None)."""
+        wanted = mc if mc and self.MC_RE.match(mc) else self.default_minecraft()
+        best = None
+        for n, v, jmc in self._jars():
+            if jmc == wanted and (best is None or v > best[1]):
+                best = (n, v)
         if best is None:
             return None, None
         return best[0], "%d.%d.%d" % best[1]
+
+    def downloads(self):
+        """Neueste JAR je Minecraft-Version für die Website, neueste Minecraft-Version zuerst."""
+        versions = {jmc for _, _, jmc in self._jars() if jmc}
+        out = []
+        for mc in versions:
+            name, version = self.latest_jar(mc)
+            if name:
+                out.append({"minecraft": mc, "version": version, "file": name, "size": len(self.jar_bytes(name) or b""),
+                            "url": "/download?mc=" + mc})
+        out.sort(key=lambda d: tuple(int(x) for x in d["minecraft"].split(".")), reverse=True)
+        return out
 
     def jar_bytes(self, name):
         return self._read(os.path.join(self.folder, "downloads", name))
@@ -483,9 +512,9 @@ class Site:
         sig = raw.decode("ascii", "replace").strip()
         return sig if re.match(r"^[A-Za-z0-9+/=]{40,200}$", sig) else None
 
-    def update_info(self):
-        """Antwort für /v1/update: was der eingebaute Updater des Clients braucht."""
-        name, version = self.latest_jar()
+    def update_info(self, mc=None):
+        """Antwort für /v1/update: was der eingebaute Updater des Clients braucht (für seine Minecraft-Version)."""
+        name, version = self.latest_jar(mc)
         if not name:
             return None
         data = self.jar_bytes(name)
@@ -499,7 +528,7 @@ class Site:
             "size": len(data),
             "sha256": self.jar_sha256(name),
             "signature": self.jar_signature(name),
-            "minecraft": info.get("minecraft"),
+            "minecraft": mc if mc and self.MC_RE.match(mc) else info.get("minecraft"),
             "title": latest["title"] if latest else "",
             "notes": (latest["body"] if latest else "")[:4000],
             "url": "/download/" + name,
@@ -797,8 +826,9 @@ def make_handler(state):
 
         # ---------- Website ----------
 
-        def site_route(self, path):
+        def site_route(self, path, query=""):
             """Website, Download und Website-Daten. Gibt False zurück, wenn der Pfad nicht dazugehört."""
+            mc = urllib.parse.parse_qs(query).get("mc", [None])[0]  # Minecraft-Version (sonst die Haupt-Version)
             if path in ("/", "/index.html"):
                 html = state.site.index()
                 if html is None:
@@ -809,10 +839,10 @@ def make_handler(state):
             if path == "/download":
                 if not self.guard("download", 30):
                     return True
-                name, version = state.site.latest_jar()
+                name, version = state.site.latest_jar(mc)
                 data = state.site.jar_bytes(name) if name else None
                 if data is None:
-                    self.error(404, "no client build available yet")
+                    self.error(404, "no client build available yet" + (" for Minecraft " + mc if mc else ""))
                 else:
                     self.send_bytes(data, "application/java-archive",
                                     {"Content-Disposition": 'attachment; filename="%s"' % name, "Cache-Control": "no-cache"})
@@ -832,7 +862,7 @@ def make_handler(state):
             if path == "/v1/update":
                 if not self.guard("update", 60):
                     return True
-                info = state.site.update_info()
+                info = state.site.update_info(mc)
                 if info is None:
                     self.error(404, "no client build available yet")
                 else:
@@ -858,13 +888,13 @@ def make_handler(state):
                                   "redeemed": used})
                 size = len(state.site.jar_bytes(name) or b"") if name else 0
                 self.send_json(200, {"version": version, "file": name, "size": size, "updates": updates,
-                                     "info": info, "codes": codes})
+                                     "info": info, "codes": codes, "downloads": state.site.downloads()})
                 return True
             return False
 
         def do_HEAD(self):
             parsed = urllib.parse.urlparse(self.path)
-            if not self.site_route(parsed.path):
+            if not self.site_route(parsed.path, parsed.query):
                 self.error(404, "not found")
 
         def read_json(self):
@@ -893,7 +923,7 @@ def make_handler(state):
             try:
                 if parsed.path == "/v1/health":
                     return self.send_json(200, {"ok": True})
-                if self.site_route(parsed.path):
+                if self.site_route(parsed.path, parsed.query):
                     return
                 if parsed.path == "/v1/cosmetics":
                     if not self.guard("read", 240):

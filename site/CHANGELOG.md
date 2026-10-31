@@ -452,8 +452,38 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   Neue öffentliche Codes: `py -3 tools/backend/add_code.py 500 --public`. Abgelaufene oder aufgebrauchte Codes verschwinden
   automatisch. Bei Codes mit Limit zeigt die Seite, wie oft sie noch einlösbar sind.
 - **Funktionsliste:** steht oben im Skript von `index.html` (`FEATURES`). Bei großen neuen Funktionen dort eine Zeile ergänzen.
-- **Server-Routen:** `/` (Seite), `/download` (neueste JAR), `/v1/site` (Version, Updates, Codes als JSON).
+- **Server-Routen:** `/` (Seite), `/download` (neueste JAR, `?mc=<version>` für eine bestimmte Minecraft-Version),
+  `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
+
+## Update 3.53.1: Freunde-Modul repariert
+
+- **Fix: Freunde wurden auf vielen Servern nicht hervorgehoben** (kein Stern, keine Freundesfarbe über dem Kopf, in der
+  Tab-Liste und im Chat, Freund nie "online"). Ursache: Freunde wurden nur über ihre Mojang-UUID erkannt. Offline-Server
+  und manche Proxys geben Spielern aber eine eigene UUID, dort passte sie nie. Jetzt zählt zusätzlich der Name, wenn die
+  UUID nicht passt.
+- **Fix: "Right-click in chat" ging nicht.** Der Rechtsklick hing an einer Methode, die es seit Minecraft 1.21.11 nicht mehr
+  gibt. Jetzt wird beim Rechtsklick im offenen Chat der Name unter der Maus gesucht (wie beim Linksklick von Minecraft)
+  und der Spieler hinzugefügt.
+- Geprüft im Spiel: Freund mit abweichender UUID bekommt Stern und Farbe über dem Kopf und in der Tab-Liste und gilt als
+  online, sein Name im Chat ist markiert, Rechtsklick auf einen Namen im Chat fügt ihn hinzu.
+
+## Update 3.53.0: Download-Bereich und Updater nach Minecraft-Version
+
+- **Website:** Neuer Abschnitt **Download** mit einer Karte pro verfügbarer Minecraft-Version (Version, Größe,
+  Download-Knopf). Alle Download-Knöpfe der Seite springen dorthin. Aktuell gibt es **Minecraft 1.21.11**.
+- **Updater:** Der Client sagt dem Server jetzt, für welche Minecraft-Version er läuft, und bekommt nur Updates für genau
+  diese Version. Ältere Clients bekommen wie bisher die 1.21.11-Version.
+
+## Update 3.52.1: Fix "7b" vor Namen mit animiertem Nametag
+
+- **Fix:** Bei manchen Spielern standen mit animiertem Nametag fremde Zeichen vor dem Namen, z.B. "7b533m" statt "533m".
+  Ursache: Einige Server schreiben alte Minecraft-Farbcodes direkt in den Namen (z.B. "§7§b533m"). Das Nametag färbt den
+  Namen Buchstabe für Buchstabe ein; dabei stand das "§" allein und der Buchstabe dahinter (7, b ...) wurde sichtbar.
+- Jetzt werden diese Codes vor dem Einfärben entfernt (auch Hex-Farben und Fett/Kursiv-Codes). Das animierte Nametag
+  ersetzt die Farben des Servers ohnehin. Geprüft mit "§7§b533m" → "533m", "§7543m" → "543m" und weiteren Fällen.
+- Betrifft Nametags über dem Kopf, in der Tab-Liste und im Chat. Spieler sehen den Fix, sobald **sie selbst** (die den Namen
+  anzeigen) 3.52.1 haben.
 
 ## Update 3.52.0: Daily Missions und 8 Items im Hourly Shop
 
