@@ -25,6 +25,27 @@
       "coins": 1250,
       "public": true,
       "code": "GOON-UPGRADE-1250"
+    },
+    {
+      "id": "halloween2026",
+      "hash": "aa2e4a7d717f156f2e70be848487b5ba7aff40d4891563a9b3b5375b02386816",
+      "coins": 2000,
+      "expires": "2026-11-06",
+      "public": true,
+      "code": "GOON-HALLOWEEN-2026"
+    },
+    {
+      "id": "sorry1500",
+      "hash": "fb1fcab891f8ea25fc865ce9c4d5f74068ef57fb4730b2c76cc01ef34ebd227a",
+      "coins": 1500,
+      "public": true,
+      "code": "GOON-SORRY-1500"
+    },
+    {
+      "id": "hackerorbit",
+      "hash": "c7e4f93ce6e1d62d4549038f60818d3c87fec9446ba59748fafa21a2c9ac27c6",
+      "coins": 0,
+      "item": "accessory.hackerorbit"
     }
   ]
 }

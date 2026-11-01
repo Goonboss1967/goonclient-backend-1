@@ -8,6 +8,8 @@ hochladen bzw. ersetzen; Render deployt neu und der Code gilt sofort für alle S
   py -3 tools/backend/add_code.py 1000 --max-uses 20           nur die ersten 20 Spieler
   py -3 tools/backend/add_code.py 250 --expires 2026-12-31     gültig bis einschließlich 31.12.2026
   py -3 tools/backend/add_code.py 500 --public                 Code wird auf der Website angezeigt
+  py -3 tools/backend/add_code.py 0 --item accessory.hackerorbit   Code für ein exklusives Item (ohne Coins)
+    Items per Code sind immer exklusiv: das Item muss im Client als exclusive(...) in ShopCatalog stehen.
   py -3 tools/backend/add_code.py --list                       alle Codes anzeigen (nur Ids, der Klartext ist nicht gespeichert)
 
 In codes.json steht nur der Hash. Den ausgegebenen Code selbst gut aufheben, er lässt sich nicht wiederherstellen.
@@ -32,7 +34,8 @@ def normalize(text):
 
 def main():
     p = argparse.ArgumentParser(description="Neuen Goon-Coins-Code anlegen")
-    p.add_argument("coins", type=int, nargs="?", help="Anzahl Goon Coins (1-100000)")
+    p.add_argument("coins", type=int, nargs="?", help="Anzahl Goon Coins (0-100000, 0 nur zusammen mit --item)")
+    p.add_argument("--item", help="exklusives Item, das der Code zusätzlich gibt (Shop-Id, z.B. accessory.hackerorbit)")
     p.add_argument("--code", help="eigener Code statt eines zufälligen")
     p.add_argument("--id", help="Name des Codes in der Datei (Standard: automatisch)")
     p.add_argument("--max-uses", type=int, help="höchstens so viele Spieler insgesamt")
@@ -56,10 +59,14 @@ def main():
                 extra.append("max %d" % c["maxUses"])
             if c.get("expires"):
                 extra.append("bis %s" % c["expires"])
-            print("%-20s %6d Coins  %s" % (c["id"], c["coins"], ", ".join(extra)))
+            if c.get("item"):
+                extra.append("Item %s" % c["item"])
+            print("%-20s %6d Coins  %s" % (c["id"], c.get("coins", 0), ", ".join(extra)))
         return
-    if a.coins is None or not 0 < a.coins <= 100000:
-        sys.exit("Bitte eine Coin-Anzahl zwischen 1 und 100000 angeben (z.B. add_code.py 500).")
+    if a.item and not re.fullmatch(r"[a-z]{1,16}\.[a-z0-9_]{1,32}", a.item):
+        sys.exit("--item bitte als Shop-Id angeben, z.B. accessory.hackerorbit.")
+    if a.coins is None or not (0 if a.item else 1) <= a.coins <= 100000:
+        sys.exit("Bitte eine Coin-Anzahl zwischen 1 und 100000 angeben (z.B. add_code.py 500); 0 nur mit --item.")
     if a.expires and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", a.expires):
         sys.exit("--expires bitte als JJJJ-MM-TT angeben.")
 
@@ -75,6 +82,8 @@ def main():
     if not re.fullmatch(r"[a-z0-9_]{1,32}", cid) or any(c.get("id") == cid for c in codes):
         sys.exit("Die Id ist ungültig oder schon vergeben (nur a-z, 0-9, _).")
     entry = {"id": cid, "hash": h, "coins": a.coins}
+    if a.item:
+        entry["item"] = a.item
     if a.max_uses:
         entry["maxUses"] = a.max_uses
     if a.expires:
@@ -88,6 +97,8 @@ def main():
         f.write("\n")
     print("Neuer Code:  %s" % code)
     print("Coins:       %d" % a.coins)
+    if a.item:
+        print("Item:        %s (exklusiv)" % a.item)
     print("Eingetragen in %s (Id %s). Jetzt codes.json auf GitHub hochladen." % (a.file, cid))
 
 

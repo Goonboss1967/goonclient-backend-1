@@ -87,8 +87,20 @@ def main():
     with open(os.path.join(site, "CHANGELOG.md"), "w", encoding="utf-8") as f:
         f.write("# GoonClient\n\n| Minecraft | 1.21.11 |\n|---|---|\n| Fabric API | 0.141.5+1.21.11 |\n\n## 1. Setup\nx\n\n"
                 "## Update 3.10.0: Neu\n- Punkt A\n\n## Update 3.9.0: Alt\n- Punkt B\n\n## 2. Sonstiges\ny\n")
+    events = os.path.join(tmp, "events.json")
+    with open(os.path.join(HERE, "events.json"), encoding="utf-8") as f:
+        real_events = json.load(f)
+    real_events["events"] += [
+        {"id": "BAD ID", "name": "x", "currency": "y", "currencyName": "z", "start": "2026-01-01T00:00:00+01:00",
+         "end": "2026-01-02T00:00:00+01:00", "items": ["cape.lantern"]},
+        {"id": "notz", "name": "x", "currency": "y", "currencyName": "z", "start": "2026-01-01T00:00:00",
+         "end": "2026-01-02T00:00:00", "items": ["cape.lantern"]},
+        {"id": "toolong", "name": "x", "currency": "y", "currencyName": "z", "start": "2026-01-01T00:00:00+01:00",
+         "end": "2027-01-02T00:00:00+01:00", "items": ["cape.lantern"]}]
+    with open(events, "w", encoding="utf-8") as f:
+        json.dump(real_events, f)
     proc = subprocess.Popen([sys.executable, os.path.join(HERE, "server.py"), "--port", str(port), "--db", db, "--insecure",
-                             "--codes", codes, "--site", site],
+                             "--codes", codes, "--site", site, "--events", events],
                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     base = "http://127.0.0.1:%d" % port
     try:
@@ -101,6 +113,35 @@ def main():
         a, b, c = Client(base), Client(base), Client(base)
         check(a.login("Alice", A) == 200 and b.login("Bob", B) == 200 and c.login("Carl", C) == 200, "three logins")
 
+        # Events (events.json): ohne Anmeldung, ungültige Einträge fallen weg, Zeiten mit Zeitzone
+        s, ev = Client(base).req("GET", "/v1/events")
+        lst = ev.get("events", [])
+        check(s == 200 and len(lst) == 1 and lst[0]["id"] == "halloween2026", "events: only valid entries: %r" % [e.get("id") for e in lst])
+        check(lst and lst[0]["startMs"] == 1793401200000 and lst[0]["endMs"] == 1794006000000, "events: times in ms (German time)")
+        check(lst and len(lst[0]["items"]) == 15 and lst[0]["currency"] == "halloween" and lst[0]["theme"] == "halloween", "events: fields")
+        real_events["events"].append({"id": "winter2026", "name": "Winter", "currency": "snow", "currencyName": "Snowflakes",
+                                      "start": "2026-12-20T00:00:00+01:00", "end": "2027-01-03T00:00:00+01:00",
+                                      "color": "#60A5FA", "theme": "winter", "items": ["cape.lantern"]})
+        with open(events, "w", encoding="utf-8") as f:
+            json.dump(real_events, f)
+        time.sleep(0.05)
+        os.utime(events, None)
+        ids = [e["id"] for e in Client(base).req("GET", "/v1/events")[1].get("events", [])]
+        check(ids == ["halloween2026", "winter2026"], "events: new event at once (hot reload): %r" % ids)
+
+        # Schrift: Rundlauf, ungültige Ids werden verworfen, alte Einträge ohne "font" bleiben gültig
+        a.req("PUT", "/v1/cosmetics", {"cape": "gold", "font": "royal"})
+        _, got = b.req("GET", "/v1/cosmetics?uuids=" + A)
+        check(got["players"][A].get("font") == "royal", "font round trip")
+        a.req("PUT", "/v1/cosmetics", {"cape": "gold", "font": "Bad-Font!"})
+        _, got = b.req("GET", "/v1/cosmetics?uuids=" + A)
+        check(got["players"][A].get("font") == "", "invalid font id dropped")
+        a.req("PUT", "/v1/cosmetics", {"cape": "gold", "font": "x" * 25})
+        _, got = b.req("GET", "/v1/cosmetics?uuids=" + A)
+        check(got["players"][A].get("font") == "", "too long font id dropped")
+        a.req("PUT", "/v1/cosmetics", {"cape": "gold"})
+        _, got = b.req("GET", "/v1/cosmetics?uuids=" + A)
+        check(got["players"][A].get("font") == "" and got["players"][A].get("cape") == "gold", "old client without font stays valid")
         # Cosmetics mit 3D-Accessoires
         s, _ = a.req("PUT", "/v1/cosmetics", {"cape": "gold", "badge": "star", "hat": "crown", "wings": "angel",
                                                "accessory": "halo", "evil": "x", "tag": "BAD ID!"})
@@ -108,6 +149,9 @@ def main():
         p = got["players"].get(A, {})
         check(s == 200 and p.get("hat") == "crown" and p.get("wings") == "angel" and p.get("accessory") == "halo", "accessories stored")
         check("evil" not in p and p.get("tag") == "", "unknown fields dropped, bad ids cleared")
+        nobody = "00000000-0000-4000-8000-000000000001"
+        _, got = b.req("GET", "/v1/cosmetics?uuids=" + A + "," + nobody)
+        check(got.get("active") == [A], "active lists only players who uploaded recently")
 
         # Codes: einmal pro Account
         check(a.req("POST", "/v1/redeem", {"id": "launch100"})[0] == 200, "redeem first time")
@@ -137,6 +181,18 @@ def main():
         check(s == 410 and "used up" in r.get("error", ""), "max uses reached -> 410")
         s, r = a.req("POST", "/v1/redeem/code", {"code": "GOON-OLD-0001"})
         check(s == 410 and "expired" in r.get("error", ""), "expired code -> 410")
+        # Code für ein exklusives Item (ohne Coins): alte Clients bekommen 426 und verbrauchen den Code nicht
+        out = subprocess.run([sys.executable, os.path.join(HERE, "add_code.py"), "0", "--item", "accessory.hackerorbit",
+                              "--code", "GOON-ITEM-0001", "--file", codes], capture_output=True, text=True)
+        time.sleep(0.05)
+        os.utime(codes, None)
+        check(out.returncode == 0, "item code created: " + out.stderr)
+        check(a.req("POST", "/v1/redeem/code", {"code": "GOON-ITEM-0001"})[0] == 426, "item code refused for old clients")
+        s, r = a.req("POST", "/v1/redeem/code", {"code": "GOON-ITEM-0001", "items": True})
+        check(s == 200 and r.get("item") == "accessory.hackerorbit" and r.get("coins") == 0, "item code gives the item: %r" % (r,))
+        check(a.req("POST", "/v1/redeem/code", {"code": "GOON-ITEM-0001", "items": True})[0] == 409, "item code only once")
+        bad = subprocess.run([sys.executable, os.path.join(HERE, "add_code.py"), "0", "--file", codes], capture_output=True, text=True)
+        check(bad.returncode != 0, "0 coins without item refused")
         listed = subprocess.run([sys.executable, os.path.join(HERE, "add_code.py"), "--list", "--file", codes],
                                 capture_output=True, text=True).stdout
         check("bonus3000" in listed and "GOON-TEST-7777" not in listed and "GOON-TEST-7777" not in open(codes).read(),
@@ -189,6 +245,33 @@ def main():
         check(r.get("status") == "declined" and ovc["outgoing"] == [] and ovc["friends"] == [], "decline removes the request")
         _, ova = a.req("GET", "/v1/friends")
         check([x["uuid"] for x in ova["friends"]] == [B], "remove ends friendship")
+
+        # Geschenke (A und B sind Freunde, C nicht)
+        gid = "a1b2c3d4e5f60718293a4b5c"
+        s, r = a.req("POST", "/v1/gifts/send", {"id": gid, "to": B, "coins": 500, "item": ""})
+        check(s == 200 and r.get("status") == "pending", "gift sent to friend")
+        check(a.req("POST", "/v1/gifts/send", {"id": gid, "to": B, "coins": 500, "item": ""})[1].get("status") == "pending",
+              "resending the same gift is harmless")
+        check(c.req("POST", "/v1/gifts/send", {"id": gid, "to": A, "coins": 5, "item": ""})[0] == 403, "no gifts to non-friends")
+        check(b.req("POST", "/v1/gifts/send", {"id": gid, "to": A, "coins": 5, "item": ""})[0] == 409, "foreign gift id refused")
+        check(a.req("POST", "/v1/gifts/send", {"id": "f" * 24, "to": B, "coins": 5, "item": "cape.gold"})[0] == 400, "coins and item at once refused")
+        check(a.req("POST", "/v1/gifts/send", {"id": "e" * 24, "to": B, "coins": 99999, "item": ""})[0] == 400, "too many coins refused")
+        check(a.req("POST", "/v1/gifts/send", {"id": "d" * 24, "to": A, "coins": 5, "item": ""})[0] == 400, "no gift to yourself")
+        s, r = a.req("POST", "/v1/gifts/send", {"id": "c" * 24, "to": B, "coins": 0, "item": "cape.gold"})
+        _, gb = b.req("GET", "/v1/gifts")
+        inc = {g["id"]: g for g in gb.get("incoming", [])}
+        check(s == 200 and set(inc) == {gid, "c" * 24} and inc[gid]["coins"] == 500 and inc[gid]["fromName"] == "Alice"
+              and inc["c" * 24]["item"] == "cape.gold", "friend sees incoming gifts")
+        check(c.req("POST", "/v1/gifts/claim", {"id": gid})[0] == 404, "only the receiver can claim")
+        check(b.req("POST", "/v1/gifts/claim", {"id": gid})[0] == 200 and b.req("POST", "/v1/gifts/claim", {"id": gid})[0] == 200,
+              "claim (twice is harmless)")
+        _, ga = a.req("GET", "/v1/gifts")
+        _, gb = b.req("GET", "/v1/gifts")
+        check(ga["sent"].get(gid) is True and ga["sent"].get("c" * 24) is False, "sender sees which gifts were claimed")
+        check([g["id"] for g in gb["incoming"]] == ["c" * 24], "claimed gift no longer incoming")
+        check(a.req("POST", "/v1/gifts/send", {"id": gid, "to": B, "coins": 500, "item": ""})[1].get("status") == "claimed",
+              "resend after claim reports claimed")
+        check(Client(base).req("GET", "/v1/gifts")[0] == 401, "gifts need login")
 
         # Ohne Login
         anon = Client(base)

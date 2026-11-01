@@ -21,7 +21,8 @@ Schnittstelle (alles JSON):
   POST /v1/auth/challenge                      -> {"serverId": "..."}
   POST /v1/auth/verify   {"username","serverId"} -> {"token","uuid","expiresIn"}
   PUT  /v1/cosmetics     (Authorization: Bearer <token>) Body: Cosmetics-Objekt
-  GET  /v1/cosmetics?uuids=<uuid>,<uuid>,...   (höchstens 100) -> {"players": {"<uuid>": Cosmetics-Objekt}}
+  GET  /v1/cosmetics?uuids=<uuid>,<uuid>,...   (höchstens 100) -> {"players": {"<uuid>": Cosmetics-Objekt}, "active": ["<uuid>", ...]}
+       ("active" = hat in den letzten 15 Minuten hochgeladen, spielt also gerade mit GoonClient)
   POST /v1/redeem/code   (Authorization: Bearer <token>) {"code": "<eingetippter Code>"} -> 200 {"ok", "id", "coins"},
                          400 ungültig, 409 schon eingelöst, 410 abgelaufen/aufgebraucht. Codes stehen in codes.json (add_code.py).
   POST /v1/redeem        (alt, Client 3.8-3.9) {"id": "<code-id>"} -> 200 {"ok": true} oder 409 (schon eingelöst)
@@ -39,6 +40,12 @@ Schnittstelle (alles JSON):
   GET  /v1/update                          -> {"version", "file", "size", "sha256", "signature", "minecraft", "title", "notes", "url"}
   GET  /download/goonclient-x.y.z.jar      -> genau diese JAR (für den eingebauten Updater)
                                               (codes = in codes.json als "public" markierte Codes, nicht abgelaufen)
+  Geschenke (alle mit Authorization: Bearer <token>, nur unter bestätigten Freunden):
+  POST /v1/gifts/send   {"id", "to", "coins", "item"} -> {"status": "pending" | "claimed"} (wiederholbar mit derselben Id)
+  GET  /v1/gifts                           -> {"incoming": [{"id","from","fromName","coins","item"}], "sent": {"<id>": claimed}}
+  POST /v1/gifts/claim  {"id"}             -> {"ok": true}, 404 ohne solches Geschenk
+  GET  /v1/events                          -> {"events": [...]} aus events.json (Event-Shops: Termine, Währung, Items;
+                                              ohne Anmeldung, neue Termine ohne neue Client-Version)
 """
 import argparse
 import hashlib
@@ -62,11 +69,17 @@ MAX_CODE_COINS = 100000
 CHALLENGE_TTL = 60
 TOKEN_TTL = 3600
 RECORD_MAX_AGE = 60 * 24 * 3600  # 60 Tage ohne Lebenszeichen: Eintrag wird gelöscht
+AURA_STYLE_DEFAULT = 100 | 100 << 8 | 100 << 16  # Aura: 100 % Dichte, Größe und Tempo, keine eigenen Farben
+PET_STYLE_DEFAULT = 120 | 100 << 8 | 1 << 16  # Haustier: 120 % Größe, 100 % Animation, Effekte an
+ACTIVE_MAX_AGE = 15 * 60  # Clients laden alle 5 Minuten hoch: so lange gilt ein Spieler als aktiver GoonClient-Nutzer
 
 DEFAULTS = {
     "cape": "", "badge": "", "badgeColor": 0xFFFFFF, "badgeText": "", "badgePrefix": False,
     "tag": "", "tagColor1": 0xFFFFFF, "tagColor2": 0xFFFFFF, "tagSpeed": 0, "tagBold": False,
-    "hat": "", "wings": "", "accessory": "",
+    "hat": "", "wings": "", "accessory": "", "pet": "", "aura": "",
+    "auraStyle": AURA_STYLE_DEFAULT, "auraColor1": 0xFFFFFF, "auraColor2": 0xFFFFFF,
+    "petStyle": PET_STYLE_DEFAULT,
+    "font": "",
 }
 
 
@@ -114,11 +127,44 @@ def clean_cosmetics(raw):
         "hat": as_id(raw.get("hat")),
         "wings": as_id(raw.get("wings")),
         "accessory": as_id(raw.get("accessory")),
+        "pet": as_id(raw.get("pet")),
+        "aura": as_id(raw.get("aura")),
+        # Aura-Einstellungen (ab Client 3.59.0): Dichte | Größe << 8 | Tempo << 16 | eigene Farben << 24
+        "auraStyle": clean_aura_style(raw.get("auraStyle")),
+        "auraColor1": as_int(raw.get("auraColor1"), 0, 0xFFFFFF, 0xFFFFFF),
+        "auraColor2": as_int(raw.get("auraColor2"), 0, 0xFFFFFF, 0xFFFFFF),
+        # Haustier-Einstellungen (ab Client 3.60.0): Größe | Animation << 8 | Effekte << 16
+        "petStyle": clean_pet_style(raw.get("petStyle")),
+        # Schrift des Namens (ab Client 3.61.0); ältere Clients schicken sie nicht und bekommen ""
+        "font": as_id(raw.get("font")),
     }
+
+
+def clean_pet_style(value):
+    """Wie CosmeticsPayload.packPetStyle: Größe 50-200 %, Animation 0-150 %, Bit 16 = Effekte."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return PET_STYLE_DEFAULT
+    size = max(50, min(200, value & 0xFF))
+    anim = max(0, min(150, (value >> 8) & 0xFF))
+    return size | anim << 8 | ((value >> 16) & 1) << 16
+
+
+def clean_aura_style(value):
+    """Wie CosmeticsPayload.packAuraStyle: Dichte 25-200, Größe 50-200, Tempo 25-200 (Prozent), Bit 24 = eigene Farben."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return AURA_STYLE_DEFAULT
+    intensity = max(25, min(200, value & 0xFF))
+    size = max(50, min(200, (value >> 8) & 0xFF))
+    speed = max(25, min(200, (value >> 16) & 0xFF))
+    return intensity | size << 8 | speed << 16 | ((value >> 24) & 1) << 24
 
 
 ITEM_RE = re.compile(r"^[a-z]+\.[a-z0-9_]{1,24}$")
 MAX_PENDING_REQUESTS = 200
+MAX_OPEN_GIFTS = 50
+MAX_GIFT_COINS = 10000
+GIFT_ID_RE = re.compile(r"^[0-9a-f]{16,32}$")
+GIFT_ITEM_RE = re.compile(r"^[a-z]+\.[a-z0-9_]{1,32}$")
 MAX_OWNED = 400
 
 
@@ -159,6 +205,9 @@ class Store:
         self.db.execute("CREATE TABLE IF NOT EXISTS friendships (a TEXT NOT NULL, b TEXT NOT NULL, since REAL NOT NULL, "
                         "PRIMARY KEY (a, b))")
         self.db.execute("CREATE TABLE IF NOT EXISTS stats (uuid TEXT PRIMARY KEY, data TEXT NOT NULL, updated REAL NOT NULL)")
+        # Geschenke (ab Client 3.48.0): Id kommt vom Sender, damit er nach einem Datenverlust erneut schicken kann
+        self.db.execute("CREATE TABLE IF NOT EXISTS gifts (id TEXT PRIMARY KEY, src TEXT NOT NULL, dst TEXT NOT NULL, "
+                        "coins INTEGER NOT NULL, item TEXT NOT NULL, at REAL NOT NULL, claimed REAL)")
         self.db.commit()
         self.purge()
 
@@ -255,6 +304,41 @@ class Store:
                 friends.append({"uuid": other, "name": self._name(other), "since": int(since * 1000)})
         return {"incoming": incoming, "outgoing": outgoing, "friends": friends}
 
+    # ---------- Geschenke ----------
+
+    def send_gift(self, src, gid, dst, coins, item):
+        """Legt ein Geschenk an (wiederholbar mit derselben Id). Gibt "pending"/"claimed" zurück, None bei fremder Id."""
+        with self.lock:
+            row = self.db.execute("SELECT src, claimed FROM gifts WHERE id=?", (gid,)).fetchone()
+            if row:
+                return None if row[0] != src else ("claimed" if row[1] else "pending")
+            open_count = self.db.execute("SELECT COUNT(*) FROM gifts WHERE src=? AND claimed IS NULL", (src,)).fetchone()[0]
+            if open_count >= MAX_OPEN_GIFTS:
+                raise RuntimeError("too many open gifts")
+            self.db.execute("INSERT INTO gifts(id, src, dst, coins, item, at, claimed) VALUES(?,?,?,?,?,?,NULL)",
+                            (gid, src, dst, coins, item, time.time()))
+            self.db.commit()
+            return "pending"
+
+    def gifts_overview(self, me):
+        with self.lock:
+            incoming = [{"id": r[0], "from": r[1], "fromName": self._name(r[1]), "coins": r[2], "item": r[3]}
+                        for r in self.db.execute("SELECT id, src, coins, item FROM gifts WHERE dst=? AND claimed IS NULL "
+                                                 "ORDER BY at", (me,)).fetchall()]
+            sent = {r[0]: r[1] is not None for r in self.db.execute(
+                "SELECT id, claimed FROM gifts WHERE src=? AND at > ?", (me, time.time() - 30 * 86400)).fetchall()}
+        return {"incoming": incoming, "sent": sent}
+
+    def claim_gift(self, me, gid):
+        """Empfänger bestätigt ein Geschenk. False, wenn es kein Geschenk an ihn mit dieser Id gibt."""
+        with self.lock:
+            row = self.db.execute("SELECT 1 FROM gifts WHERE id=? AND dst=?", (gid, me)).fetchone()
+            if not row:
+                return False
+            self.db.execute("UPDATE gifts SET claimed=? WHERE id=? AND claimed IS NULL", (time.time(), gid))
+            self.db.commit()
+            return True
+
     def put_stats(self, uid, data):
         with self.lock:
             self.db.execute("INSERT INTO stats(uuid, data, updated) VALUES(?,?,?) "
@@ -281,9 +365,17 @@ class Store:
                     result[uid] = json.loads(row[0])
         return result
 
+    def active_among(self, uids, max_age=ACTIVE_MAX_AGE):
+        """Wer von diesen Spielern hat kürzlich hochgeladen (= spielt gerade mit GoonClient)?"""
+        since = time.time() - max_age
+        with self.lock:
+            return [uid for uid in uids
+                    if self.db.execute("SELECT 1 FROM cosmetics WHERE uuid=? AND updated>=?", (uid, since)).fetchone()]
+
 
 CODE_SALT = "goonclient-code-v1|"
 CODE_ID_RE = re.compile(r"^[a-z0-9_]{1,32}$")
+ITEM_ID_RE = re.compile(r"^[a-z]{1,16}\.[a-z0-9_]{1,32}$")  # Shop-Id, z.B. accessory.hackerorbit
 CODE_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -302,6 +394,8 @@ class Codes:
     auf Änderungen geprüft; neue Codes gelten also sofort, ohne Neustart und ohne neue Client-Version.
     Eintrag: {"id": "bonus3000", "hash": "<sha256>", "coins": 3000, "maxUses": 50, "expires": "2026-12-31"}
     (maxUses = höchstens so viele Spieler insgesamt, expires = letzter gültiger Tag; beide optional).
+    Mit "item": "accessory.hackerorbit" gibt der Code zusätzlich ein exklusives Item (dann darf "coins" 0 sein).
+    Clients vor 3.56.0 kennen keine Items: für sie gilt ein Item-Code nicht (426), damit niemand den Code ohne Item verbraucht.
     """
 
     def __init__(self, path):
@@ -328,15 +422,20 @@ class Codes:
         for c in raw.get("codes", []) if isinstance(raw, dict) else []:
             if not isinstance(c, dict):
                 continue
-            cid, h, coins = c.get("id"), c.get("hash"), c.get("coins")
+            cid, h, coins = c.get("id"), c.get("hash"), c.get("coins", 0)
+            item = c.get("item", "")
+            if not (isinstance(item, str) and (item == "" or ITEM_ID_RE.match(item))):
+                print("codes.json: invalid item, entry skipped: %r" % (c,))
+                continue
             if not (isinstance(cid, str) and CODE_ID_RE.match(cid) and isinstance(h, str) and CODE_HASH_RE.match(h)
-                    and isinstance(coins, int) and not isinstance(coins, bool) and 0 < coins <= MAX_CODE_COINS):
+                    and isinstance(coins, int) and not isinstance(coins, bool) and 0 <= coins <= MAX_CODE_COINS
+                    and (coins > 0 or item)):
                 print("codes.json: invalid entry skipped: %r" % (c,))
                 continue
             max_uses = c.get("maxUses")
             public_code = c.get("code") if c.get("public") is True and isinstance(c.get("code"), str) \
                 and hash_code(normalize_code(c.get("code"))) == h else None  # nur zeigen, wenn Klartext und Hash passen
-            table[h] = {"id": cid, "coins": coins,
+            table[h] = {"id": cid, "coins": coins, "item": item,
                         "maxUses": max_uses if isinstance(max_uses, int) and max_uses > 0 else None,
                         "expires": c.get("expires") if isinstance(c.get("expires"), str) else None,
                         "public": public_code}
@@ -364,7 +463,10 @@ class Site:
     Website nach dem Hochladen immer auf dem Stand der neuesten Client-Version.
     """
 
-    JAR_RE = re.compile(r"^goonclient-(\d+)\.(\d+)\.(\d+)\.jar$")
+    # goonclient-x.y.z.jar = Haupt-Version (Minecraft laut CHANGELOG), goonclient-x.y.z-mc26.1.2.jar = für eine andere
+    # Minecraft-Version (eigenes Projekt GoonClient-26.1.2). Website und Updater bieten jede Version passend an.
+    JAR_RE = re.compile(r"^goonclient-(\d+)\.(\d+)\.(\d+)(?:-mc(\d+(?:\.\d+){1,3}))?\.jar$")
+    MC_RE = re.compile(r"^\d+(?:\.\d+){1,3}$")
 
     def __init__(self, folder):
         self.folder = folder
@@ -392,23 +494,49 @@ class Site:
     def index(self):
         return self._read(os.path.join(self.folder, "index.html"))
 
-    def latest_jar(self):
-        """(Dateiname, Version) der neuesten JAR in site/downloads, oder (None, None)."""
-        best = None
+    def default_minecraft(self):
+        """Minecraft-Version der Haupt-JAR (ohne -mc im Namen), aus dem CHANGELOG."""
+        return self.changelog(limit=1)[1].get("minecraft") or "1.21.11"
+
+    def _jars(self):
+        """Alle JARs in site/downloads: [(Dateiname, (x, y, z), Minecraft-Version)]."""
         folder = os.path.join(self.folder, "downloads")
         try:
             names = os.listdir(folder)
         except OSError:
-            return None, None
+            return []
+        default = None
+        out = []
         for n in names:
             m = self.JAR_RE.match(n)
             if m:
-                v = tuple(int(x) for x in m.groups())
-                if best is None or v > best[1]:
-                    best = (n, v)
+                if m.group(4) is None and default is None:
+                    default = self.default_minecraft()
+                out.append((n, tuple(int(x) for x in m.groups()[:3]), m.group(4) or default))
+        return out
+
+    def latest_jar(self, mc=None):
+        """(Dateiname, Version) der neuesten JAR für diese Minecraft-Version (None = Haupt-Version), oder (None, None)."""
+        wanted = mc if mc and self.MC_RE.match(mc) else self.default_minecraft()
+        best = None
+        for n, v, jmc in self._jars():
+            if jmc == wanted and (best is None or v > best[1]):
+                best = (n, v)
         if best is None:
             return None, None
         return best[0], "%d.%d.%d" % best[1]
+
+    def downloads(self):
+        """Neueste JAR je Minecraft-Version für die Website, neueste Minecraft-Version zuerst."""
+        versions = {jmc for _, _, jmc in self._jars() if jmc}
+        out = []
+        for mc in versions:
+            name, version = self.latest_jar(mc)
+            if name:
+                out.append({"minecraft": mc, "version": version, "file": name, "size": len(self.jar_bytes(name) or b""),
+                            "url": "/download?mc=" + mc})
+        out.sort(key=lambda d: tuple(int(x) for x in d["minecraft"].split(".")), reverse=True)
+        return out
 
     def jar_bytes(self, name):
         return self._read(os.path.join(self.folder, "downloads", name))
@@ -435,9 +563,9 @@ class Site:
         sig = raw.decode("ascii", "replace").strip()
         return sig if re.match(r"^[A-Za-z0-9+/=]{40,200}$", sig) else None
 
-    def update_info(self):
-        """Antwort für /v1/update: was der eingebaute Updater des Clients braucht."""
-        name, version = self.latest_jar()
+    def update_info(self, mc=None):
+        """Antwort für /v1/update: was der eingebaute Updater des Clients braucht (für seine Minecraft-Version)."""
+        name, version = self.latest_jar(mc)
         if not name:
             return None
         data = self.jar_bytes(name)
@@ -451,7 +579,7 @@ class Site:
             "size": len(data),
             "sha256": self.jar_sha256(name),
             "signature": self.jar_signature(name),
-            "minecraft": info.get("minecraft"),
+            "minecraft": mc if mc and self.MC_RE.match(mc) else info.get("minecraft"),
             "title": latest["title"] if latest else "",
             "notes": (latest["body"] if latest else "")[:4000],
             "url": "/download/" + name,
@@ -486,6 +614,96 @@ class Site:
         return entries[:limit], info
 
 
+EVENT_ID_RE = re.compile(r"^[a-z0-9_]{1,24}$")
+EVENT_TEXT_RE = re.compile(r"^[\x20-\x7e]{1,24}$")
+EVENT_ITEM_RE = re.compile(r"^[a-z]+\.[a-z0-9_]{1,32}$")
+EVENT_THEMES = {"halloween", "winter", "default"}
+MAX_EVENT_DAYS = 62
+
+
+def parse_event_time(text):
+    """ISO-Zeit mit Zeitzone, z.B. "2026-10-31T00:00:00+01:00", in Epoch-Millisekunden (sonst None)."""
+    import datetime
+    if not isinstance(text, str):
+        return None
+    try:
+        dt = datetime.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        return None  # ohne Zeitzone wäre der Zeitpunkt je nach Server verschieden
+    return int(dt.timestamp() * 1000)
+
+
+class Events:
+    """
+    Zeitlich begrenzte Event-Shops aus events.json (wie codes.json bei jeder Abfrage auf Änderungen geprüft). Eintrag:
+    {"id": "halloween2026", "name": "Halloween", "currency": "halloween", "currencyName": "Halloween Coins",
+     "start": "2026-10-31T00:00:00+01:00", "end": "2026-11-07T00:00:00+01:00", "endLabel": "Nov 7, 2026",
+     "coinsPerMinute": 3, "color": "#FF7A1A", "theme": "halloween", "items": ["hat.jackolantern", ...]}
+    Items müssen im Client als limitierte Items eingebaut sein; unbekannte Ids ignoriert der Client.
+    """
+
+    def __init__(self, path):
+        self.path = path
+        self.lock = threading.Lock()
+        self.mtime = None
+        self.events = []
+
+    def _reload(self):
+        try:
+            mtime = os.path.getmtime(self.path)
+        except OSError:
+            self.events, self.mtime = [], None
+            return
+        if mtime == self.mtime:
+            return
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                raw = json.load(f)
+        except (OSError, ValueError) as e:
+            print("events.json could not be read: %s" % e)
+            return  # alte Liste behalten
+        out = []
+        for e in raw.get("events", []) if isinstance(raw, dict) else []:
+            clean = clean_event(e)
+            if clean is None:
+                print("events.json: invalid entry skipped: %r" % (e,))
+            elif all(x["id"] != clean["id"] for x in out):
+                out.append(clean)
+        self.events, self.mtime = out[:8], mtime
+
+    def all(self):
+        with self.lock:
+            self._reload()
+            return list(self.events)
+
+
+def clean_event(e):
+    if not isinstance(e, dict):
+        return None
+    eid, cur = e.get("id"), e.get("currency")
+    name, cur_name = e.get("name"), e.get("currencyName")
+    if not (isinstance(eid, str) and EVENT_ID_RE.match(eid) and isinstance(cur, str) and EVENT_ID_RE.match(cur)
+            and isinstance(name, str) and EVENT_TEXT_RE.match(name) and isinstance(cur_name, str) and EVENT_TEXT_RE.match(cur_name)):
+        return None
+    start, end = parse_event_time(e.get("start")), parse_event_time(e.get("end"))
+    if start is None or end is None or end <= start or end - start > MAX_EVENT_DAYS * 86400 * 1000:
+        return None
+    cpm = e.get("coinsPerMinute", 3)
+    if not isinstance(cpm, int) or isinstance(cpm, bool) or not 1 <= cpm <= 20:
+        return None
+    items = [i for i in e.get("items", []) if isinstance(i, str) and EVENT_ITEM_RE.match(i)] \
+        if isinstance(e.get("items"), list) else []
+    if not items:
+        return None
+    color = e.get("color") if isinstance(e.get("color"), str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", e.get("color")) else "#FF7A1A"
+    label = e.get("endLabel") if isinstance(e.get("endLabel"), str) and EVENT_TEXT_RE.match(e.get("endLabel")) else ""
+    theme = e.get("theme") if e.get("theme") in EVENT_THEMES else "default"
+    return {"id": eid, "name": name, "currency": cur, "currencyName": cur_name, "startMs": start, "endMs": end,
+            "endLabel": label, "coinsPerMinute": cpm, "color": color, "theme": theme, "items": list(dict.fromkeys(items))[:64]}
+
+
 def code_expired(entry):
     exp = entry.get("expires")
     if not exp:
@@ -498,7 +716,13 @@ def code_expired(entry):
 
 # Alte Ids (laugh, heart, cry, celebrate) bleiben erlaubt, damit ältere Clients nicht abgewiesen werden
 EMOTE_IDS = {"wave", "dance", "flex", "dab", "salute", "spin", "orangejustice", "levitate",
-             "laugh", "heart", "cry", "celebrate"}
+             "laugh", "heart", "cry", "celebrate",
+             # 3.44.0
+             "thumbsup", "point", "shrug", "clap", "think", "facepalm", "bow", "cheer",
+             # 3.45.0 (Halloween, limitiert)
+             "zombie", "boo",
+             # 3.49.0 (Season-Pass, limitiert)
+             "robot"}
 EMOTE_TTL = 8.0  # so lange bleibt ein Emote abrufbar (Sekunden)
 
 
@@ -559,6 +783,7 @@ class State:
         self.limiter = RateLimiter()
         self.emotes = Emotes()
         self.codes = Codes(args.codes)
+        self.events = Events(args.events)
         self.site = Site(args.site)
         self.lock = threading.Lock()
         self.challenges = {}   # serverId -> Ablaufzeit
@@ -652,8 +877,9 @@ def make_handler(state):
 
         # ---------- Website ----------
 
-        def site_route(self, path):
+        def site_route(self, path, query=""):
             """Website, Download und Website-Daten. Gibt False zurück, wenn der Pfad nicht dazugehört."""
+            mc = urllib.parse.parse_qs(query).get("mc", [None])[0]  # Minecraft-Version (sonst die Haupt-Version)
             if path in ("/", "/index.html"):
                 html = state.site.index()
                 if html is None:
@@ -664,10 +890,10 @@ def make_handler(state):
             if path == "/download":
                 if not self.guard("download", 30):
                     return True
-                name, version = state.site.latest_jar()
+                name, version = state.site.latest_jar(mc)
                 data = state.site.jar_bytes(name) if name else None
                 if data is None:
-                    self.error(404, "no client build available yet")
+                    self.error(404, "no client build available yet" + (" for Minecraft " + mc if mc else ""))
                 else:
                     self.send_bytes(data, "application/java-archive",
                                     {"Content-Disposition": 'attachment; filename="%s"' % name, "Cache-Control": "no-cache"})
@@ -687,11 +913,16 @@ def make_handler(state):
             if path == "/v1/update":
                 if not self.guard("update", 60):
                     return True
-                info = state.site.update_info()
+                info = state.site.update_info(mc)
                 if info is None:
                     self.error(404, "no client build available yet")
                 else:
                     self.send_json(200, info)
+                return True
+            if path == "/v1/events":
+                if not self.guard("events", 60):
+                    return True
+                self.send_json(200, {"events": state.events.all()})
                 return True
             if path == "/v1/site":
                 if not self.guard("site", 120):
@@ -708,13 +939,13 @@ def make_handler(state):
                                   "redeemed": used})
                 size = len(state.site.jar_bytes(name) or b"") if name else 0
                 self.send_json(200, {"version": version, "file": name, "size": size, "updates": updates,
-                                     "info": info, "codes": codes})
+                                     "info": info, "codes": codes, "downloads": state.site.downloads()})
                 return True
             return False
 
         def do_HEAD(self):
             parsed = urllib.parse.urlparse(self.path)
-            if not self.site_route(parsed.path):
+            if not self.site_route(parsed.path, parsed.query):
                 self.error(404, "not found")
 
         def read_json(self):
@@ -743,7 +974,7 @@ def make_handler(state):
             try:
                 if parsed.path == "/v1/health":
                     return self.send_json(200, {"ok": True})
-                if self.site_route(parsed.path):
+                if self.site_route(parsed.path, parsed.query):
                     return
                 if parsed.path == "/v1/cosmetics":
                     if not self.guard("read", 240):
@@ -757,7 +988,8 @@ def make_handler(state):
                             uids.append(norm_uuid(part))
                     if len(uids) > MAX_UUIDS:
                         return self.error(400, "too many uuids (max %d)" % MAX_UUIDS)
-                    return self.send_json(200, {"players": state.store.get_many(list(dict.fromkeys(uids)))})
+                    uids = list(dict.fromkeys(uids))
+                    return self.send_json(200, {"players": state.store.get_many(uids), "active": state.store.active_among(uids)})
                 if parsed.path == "/v1/emotes":
                     if not self.guard("emotes", 600):
                         return
@@ -767,6 +999,13 @@ def make_handler(state):
                     if len(uids) > MAX_UUIDS:
                         return self.error(400, "too many uuids (max %d)" % MAX_UUIDS)
                     return self.send_json(200, {"players": state.emotes.get_many(list(dict.fromkeys(uids)))})
+                if parsed.path == "/v1/gifts":
+                    if not self.guard("friends", 240):
+                        return
+                    uid = state.uuid_for(self.bearer())
+                    if uid is None:
+                        return self.error(401, "not logged in")
+                    return self.send_json(200, state.store.gifts_overview(uid))
                 if parsed.path in ("/v1/friends", "/v1/friends/profile"):
                     if not self.guard("friends", 240):
                         return
@@ -788,8 +1027,9 @@ def make_handler(state):
             is_emote = parsed.path == "/v1/emote"
             is_redeem = parsed.path in ("/v1/redeem", "/v1/redeem/code")
             is_friends = parsed.path.startswith("/v1/friends/")
+            is_gift = parsed.path in ("/v1/gifts/send", "/v1/gifts/claim")
             group, limit = ("emote", 60) if is_emote else ("redeem", 20) if is_redeem \
-                else ("friends_write", 60) if is_friends else ("auth", 30)
+                else ("friends_write", 60) if is_friends else ("gifts", 120) if is_gift else ("auth", 30)
             if not self.guard(group, limit):
                 return
             try:
@@ -812,6 +1052,30 @@ def make_handler(state):
                         state.store.remove_friend(uid, other)
                         return self.send_json(200, {"status": "removed"})
                     return self.error(404, "not found")
+                if is_gift:
+                    uid = state.uuid_for(self.bearer())
+                    if uid is None:
+                        return self.error(401, "not logged in")
+                    gid = body.get("id")
+                    if not isinstance(gid, str) or not GIFT_ID_RE.match(gid):
+                        return self.error(400, "bad gift id")
+                    if parsed.path == "/v1/gifts/claim":
+                        if not state.store.claim_gift(uid, gid):
+                            return self.error(404, "no such gift")
+                        return self.send_json(200, {"ok": True})
+                    to = norm_uuid(body.get("to", ""))
+                    coins, item = body.get("coins", 0), body.get("item", "")
+                    if to == uid:
+                        return self.error(400, "that is you")
+                    if not isinstance(coins, int) or isinstance(coins, bool) or not 0 <= coins <= MAX_GIFT_COINS \
+                            or not isinstance(item, str) or (item and not GIFT_ITEM_RE.match(item)) or (coins > 0) == bool(item):
+                        return self.error(400, "bad gift")
+                    if not state.store.are_friends(uid, to):
+                        return self.error(403, "only friends can get gifts")
+                    status = state.store.send_gift(uid, gid, to, coins, item)
+                    if status is None:
+                        return self.error(409, "gift id already used")
+                    return self.send_json(200, {"status": status})
                 if parsed.path == "/v1/redeem/code":
                     # Neuer Weg (ab Client 3.10.0): der Spieler schickt den eingetippten Code, das Backend prüft ihn
                     uid = state.uuid_for(self.bearer())
@@ -822,11 +1086,16 @@ def make_handler(state):
                         return self.error(400, "invalid code")
                     if code_expired(entry):
                         return self.error(410, "code expired")
+                    if entry["item"] and body.get("items") is not True:
+                        return self.error(426, "update GoonClient to redeem this code")
                     if entry["maxUses"] is not None and state.store.claim_count(entry["id"]) >= entry["maxUses"]:
                         return self.error(410, "code used up")
                     if not state.store.claim(uid, entry["id"]):
                         return self.error(409, "already redeemed")
-                    return self.send_json(200, {"ok": True, "id": entry["id"], "coins": entry["coins"]})
+                    reply = {"ok": True, "id": entry["id"], "coins": entry["coins"]}
+                    if entry["item"]:
+                        reply["item"] = entry["item"]
+                    return self.send_json(200, reply)
                 if is_redeem:
                     uid = state.uuid_for(self.bearer())
                     if uid is None:
@@ -898,6 +1167,8 @@ def main():
     p.add_argument("--db", default="goonclient.db")
     p.add_argument("--codes", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "codes.json"),
                    help="Datei mit den einlösbaren Codes (Standard: codes.json neben server.py)")
+    p.add_argument("--events", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "events.json"),
+                   help="Datei mit den Event-Shops (Standard: events.json neben server.py)")
     p.add_argument("--site", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "site"),
                    help="Ordner der Website (Standard: site/ neben server.py)")
     p.add_argument("--mojang", default="https://sessionserver.mojang.com", help="Basis-URL des Mojang Session-Servers")

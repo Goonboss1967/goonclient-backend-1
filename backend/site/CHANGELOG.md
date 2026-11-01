@@ -434,8 +434,13 @@ Alle stehenden Emotes atmen leicht; Übergänge laufen mit weichem Ein- und Auss
 
 Die Website läuft auf demselben Render-Server wie das Backend: **https://goonclient-backend-1.onrender.com/**
 
-- **Inhalt:** Download der neuesten Version, alle Funktionen, die Redeem-Codes zum Kopieren und die Updates (direkt aus diesem
-  Changelog), dazu eine Installationsanleitung. Die Seite funktioniert auch auf dem Handy.
+- **Inhalt:** Download der neuesten Version, Überblick, **jedes Modul im Detail** (Reiter Render & PvP, HUD, Utility, Gadgets,
+  Menü & Client), ein eigener Abschnitt für den **Pack Mixer** (Anleitung, Funktionen, alle Abteile), **Shop & Pass**
+  (Goon Coins, Battle Pass, tägliche Belohnung, Missionen, Hourly Shop, Event-Shops, Wunschliste, Outfits), **Freunde**
+  (Anfragen, Stats, Geschenke, Emotes, Cosmetics-Sync), die Redeem-Codes zum Kopieren, die Updates (direkt aus diesem
+  Changelog), Installation und FAQ. Die Seite funktioniert auch auf dem Handy (Menü-Knopf statt Navigationsleiste).
+- **Neue Client-Funktion auf der Website ergänzen:** in `index.html` im Skript die Listen `OVERVIEW`, `MODULES` bzw. die
+  Karten in `economy-grid` / `social-grid` erweitern. Codes, Updates, Version und Download kommen automatisch vom Server.
 - **Dateien:** `tools/backend/site/`
   - `index.html` – die Seite.
   - `downloads/goonclient-x.y.z.jar` – die JAR für den Download-Knopf.
@@ -447,8 +452,438 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   Neue öffentliche Codes: `py -3 tools/backend/add_code.py 500 --public`. Abgelaufene oder aufgebrauchte Codes verschwinden
   automatisch. Bei Codes mit Limit zeigt die Seite, wie oft sie noch einlösbar sind.
 - **Funktionsliste:** steht oben im Skript von `index.html` (`FEATURES`). Bei großen neuen Funktionen dort eine Zeile ergänzen.
-- **Server-Routen:** `/` (Seite), `/download` (neueste JAR), `/v1/site` (Version, Updates, Codes als JSON).
+- **Server-Routen:** `/` (Seite), `/download` (neueste JAR, `?mc=<version>` für eine bestimmte Minecraft-Version),
+  `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
+
+## Update 3.61.0: Schriften im Goon Shop
+
+Neue Shop-Kategorie **Fonts**: Du kaufst eine Schrift mit Goon Coins und rüstest sie im Inventar aus. Sie gilt für deinen Namen über dem
+Kopf, im Chat und in der Tab-Liste und funktioniert zusammen mit Nametag-Farben, Animationen, Badges und Chat-Animation.
+
+| Schrift | Seltenheit | Preis | Look |
+|---|---|---|---|
+| Default | Starter | 0 | normale Minecraft-Schrift, gehört jedem, bedeutet "keine Schrift" |
+| Pixel Classic | Common | 30 | breite, eckige Pixel-Blöcke |
+| Rounded | Common | 45 | dicke Linien mit runden Enden |
+| Bold Block | Uncommon | 90 | schwer und breit |
+| Thin Line | Uncommon | 120 | eine feine Linie (am besten ab GUI-Skala 2) |
+| Typewriter | Uncommon | 150 | Serifen, alle Zeichen gleich breit |
+| Gothic | Rare | 240 | breite Feder, gebrochene Bögen, Fraktur-Stil |
+| Script | Rare | 280 | geneigte Schreibschrift mit kleinen Ausläufen |
+| Retro Arcade | Rare | 320 | breite Blöcke mit Bildröhren-Streifen |
+| Cyber | Rare | 380 | eckig, in der Mitte durchgeschnitten |
+| Neon Tube | Epic | 600 | heller Kern mit dunklerer Leucht-Kontur |
+| Graffiti | Epic | 780 | fette Sprühbuchstaben, die tanzen und manchmal tropfen |
+| Runic | Epic | 950 | nur gerade, geritzte Striche |
+| Royal | Legendary | 1600 | Serifen, kleine Krone auf Großbuchstaben |
+| Glitch | Legendary | 2100 | versetzte Scheiben und ein blasser Doppelgänger |
+| Cosmic | Legendary | 2600 | hohle Sternenstaub-Buchstaben mit kleinen Sternen |
+
+- **Kaufen:** Der Goon Shop hat oben jetzt die Tabs `Hourly items` und `Fonts`. Schriften sind dauerhaft im Tab `Fonts` zu haben und
+  kommen nicht in die stündliche Rotation (die bleibt dadurch für alle Versionen gleich). Kauf mit Bestätigung, Doppelkauf-Schutz,
+  Speicherung in `wallet.json` wie bei allen Items. Alte `wallet.json`-Dateien laden ohne Verlust.
+- **Ausrüsten:** Inventar, Tab `Fonts`, oder `Goon Cosmetics > Settings > Fonts`. Nicht gekaufte Schriften stehen dort als `Locked` und
+  lassen sich nicht wählen. Auch Outfits merken sich die Schrift; ältere Outfits lassen sie unverändert.
+- **Vorschau:** Karten zeigen deinen Namen in der Schrift mit dem ausgerüsteten Nametag-Stil. Der Detailbereich zeigt zusätzlich einen
+  Chat-Satz und eine Tab-Zeile.
+- **Einstellungen:** `Font in chat`, `Font in nametag`, `Font in tab list` (je an/aus, Standard an) in `Goon Cosmetics > Settings > Fonts` und
+  im Inventar. Dazu `Show other players' fonts` bei den Ansichts-Einstellungen. Die Schalter gelten für alles, was DU siehst.
+- **Abgedeckte Zeichen:** A-Z, a-z, 0-9, `_`, `-`, Leerzeichen. Alles andere (`ä`, `[`, `★` ...) kommt über den Verweis auf `minecraft:default`
+  aus der Standard-Schrift, es entstehen keine Kästchen.
+- **Breiten:** Nametag-Band, Badge-Position, Chat-Umbruch und Tab-Liste rechnet Minecraft selbst über die Font-Metriken. Schriften sind
+  breiter als Standard (`xX_Steve-99`: 64 Pixel Standard, 73 bis 106 Pixel je Schrift), die Tab-Liste wird dadurch breiter.
+- **Grenzen:**
+  - Fremder Besitz lässt sich nicht prüfen, wie bei allen Items: Wer die Datei manipuliert, kann bei anderen jede bekannte Schrift zeigen.
+  - Fremde Spieler zeigen nur Schriften, die dieser Client kennt; unbekannte Ids werden still zur Standard-Schrift.
+  - Bei GUI-Skala 1 werden die 2-fach aufgelösten Zeichen grob, feine Details (Thin Line, Cosmic) können verschwinden.
+  - Badge-Text und das GoonClient-Symbol behalten ihre Schrift, nur der Name ändert sich.
+  - Eine eigene Schrift für das GoonClient-Menü ist nicht enthalten (optional im Auftrag, bewusst weggelassen).
+- **Defekte Dateien:** Fehlt eine Datei oder ist sie kaputt, gilt die Standard-Schrift. Es gibt einen Eintrag im Log und einen roten Hinweis
+  in `Goon Cosmetics > Settings > Fonts`. Geprüft wird beim ersten Benutzen und danach höchstens alle 30 Sekunden.
+- **Lizenz:** Alle Schriften sind selbst erstellt: `tools/GenerateFonts.java` zeichnet jeden Buchstaben aus eigenen Linienzügen. Es steckt keine
+  fremde Schriftdatei darin, deshalb gibt es keine fremden Lizenztexte. Der Rückfall nutzt die im Spiel vorhandene Minecraft-Schrift.
+
+**Schriften neu erzeugen** (nach `gradlew clientClasses`, schreibt `assets/goonclient/font/*.json` und `textures/font/*.png`; Kontaktbögen:
+`build/font_sheet.png`, `build/font_sheet_big.png`):
+
+```
+javac -encoding UTF-8 -cp build\classes\java\client -d build\tools tools\GenerateFonts.java
+java -cp "build\tools;build\classes\java\client" GenerateFonts
+```
+
+**Tests:** `tools/FontLogicTest.java` (Katalog, Preisbänder, Kauf, Ids, Zeichenabdeckung, Alt-Daten, Atlas-Konsistenz),
+`tools/BackendIntegrationTest.java` und `tools/backend/test_backend.py` (Rundlauf, ungültige Ids, Alt-Daten).
+
+**Protokoll:** `cosmetics_v7` (Protokoll 7, neues Feld `font`). Alte Clients bekommen die neuen Pakete nicht. Einträge ohne `font` gelten als Standard-Schrift.
+
+**Hochladen:** `tools/backend/server.py` im Repo `Goonboss1967/goonclient-backend` ersetzen und den Ordner `tools/backend/site` hochladen, danach
+"Manual Deploy" auf Render. Ohne die neue `server.py` verwirft das Backend das Feld `font`: Andere Spieler sehen deine Schrift dann nicht,
+auf Servern ohne GoonClient-Relay also gar nicht. Du selbst siehst sie trotzdem, Kauf und Ausrüsten funktionieren.
+
+## Update 3.60.0: Haustiere komplett überarbeitet
+
+Alle acht Haustiere (Kitten, Frog, Penguin, Bee, Fox, Bat, Little Ghost, Baby Dragon) sind neu gebaut: Chibi-Modelle aus vielen
+kleinen Teilen, eigene Pixel-Art-Texturen und Animationen, die auf den Spieler reagieren.
+
+- **Modelle und Texturen:** `cosmetics/pet/PetModels` beschreibt die Modelle als reine Daten. `tools/GeneratePets.java` malt die
+  Texturen (`textures/pet/<id>.png`) und eine Kontaktübersicht (`build/pet_textures.png`). Nach einer Modelländerung neu erzeugen.
+- **Animation:** Atmen, Blinzeln in unregelmäßigen Abständen und zufällige Idle-Aktionen. Bodentiere folgen dem Spieler federnd
+  und bleiben auf dem Gelände, der Frosch hüpft, Flieger ziehen eine 8er-Bahn, neigen sich in Kurven und schwingen beim Stoppen nach.
+- **Reaktionen:** Der Kopf schaut zum Spieler. Das Tier hüpft beim Sprung mit, duckt sich beim Schleichen und erschrickt bei Schaden.
+- **Streicheln:** `/pet` oder die Taste `Pet key` im Pet-Cosmetic: Hüpfer, Augen zu, Herzchen. Das sieht nur der Streichelnde selbst.
+- **Platz:** Tiere bleiben neben oder hinter dem Spieler und in der Ego-Ansicht weiter außen. Sie weichen Wänden aus und kommen ab
+  10 Blöcken Abstand mit einem kleinen Teleport-Effekt zurück.
+- **Änderung:** Es gibt keine Schulter-Tiere mehr. Die früheren Schulter-Tiere laufen jetzt neben dem Spieler her. Die Texte im Shop
+  sagen "Walking pet" oder "Flying pet".
+- **Einstellungen im Pet-Cosmetic:** `Size` (50-200 %), `Animation` (0-150 %), `Effects`, `Visible to others`, `Pet key`. Sie gelten
+  für das gewählte Tier, nicht je Tier. Alte Configs laden weiter (Standardwerte für die neuen Felder).
+- **Leistung:** Teile werden einmal vorberechnet, die Animation arbeitet auf wiederverwendeten Objekten. Ab 32 Blöcken läuft eine
+  einfachere Animation ohne Partikel, ab 64 Blöcken wird nichts mehr gezeichnet.
+- **Vorschau:** Shop und Inventar zeigen das Tier lebendig neben dem Spieler.
+- **Tests:** `tools/PetAnimatorTest.java` prüft Winkel, NaN, stetige Übergänge, Federung, Abstand beim Dauerlauf, Teleport, Gelände
+  und alte Configs.
+
+**Fehler aus 3.59.0 behoben:** Der Kanal `cosmetics_v5` hatte neue Felder ohne neue Kennung bekommen. Jetzt gilt `cosmetics_v6`
+(Protokoll 6, neues Feld `petStyle`). `Visible to others` wirkte erst nach einer weiteren Änderung, jetzt sofort.
+
+**Hochladen:** `tools/backend/server.py` (speichert `petStyle`) und den Ordner `tools/backend/site`, danach "Manual Deploy" auf Render.
+
+## Update 3.59.0: Auren komplett überarbeitet
+
+Alle sieben Auren sind neu gebaut: weiche, leuchtende Teilchen statt harter Quadrate, erkennbare Formen, Schichten
+(ruhiger Mantel, klare Form, wenige helle Funken) und Bewegung, die auf den Spieler reagiert.
+
+- **Love:** kleine Herzen in zwei Größen steigen in einer langsamen Doppelhelix auf und wiegen seitlich; rosa Glimmer am
+  Körper; ab und zu pulsiert ein großes Herz. Verlauf Pink → Rosé → Weiß.
+- **Frost:** sechsstrahlige Schneekristalle in drei Größen schweben drehend herab, kalter Nebel kreist um die Füße,
+  funkelnde Lichtpunkte; beim Laufen eine kurze Eisspur.
+- **Matrix:** dichte Datenströme aus 0/1-Zeichen in einem Zylinder um den Körper, heller Kopf, verblassender Schweif,
+  verschiedene Geschwindigkeiten, ab und zu ein Glitch mit versetzten Zeichen.
+- **Flame:** echte Flammenzungen: breiter, heller Kern unten, spitz und kühler nach oben (Weiß-Gelb → Orange → Rot →
+  Dunkelrot), unregelmäßiges Flackern, aufsteigende Funken, Glut am Boden, etwas Rauch.
+- **Lightning:** zackige, verzweigte Blitzbögen (Mittelpunkt-Verschiebung) mit hellem Kern, cyanfarbenem Glow, kurzen
+  Entladungen mit Nachleuchten und Funken; Gelb als Akzent.
+- **Golden Rings:** vier dünne Ringe in verschiedenen Höhen kreisen gegenläufig, leicht geneigt und auf und ab wandernd,
+  mit mitlaufendem Glitzer; regelmäßig leuchtet ein Ring auf und schickt eine goldene Welle nach oben.
+- **Void:** dunkler Sog: violette und fast schwarze Teilchen werden spiralförmig zum Körper gezogen, helle Sterne im
+  Inneren, ab und zu ein violett-magentafarbener Riss mit Welle am Boden.
+
+**Reaktion auf den Spieler:** im Stehen ruhig und "atmend", beim Laufen bleibt die Aura als Sog hinter dir, beim Sprinten
+intensiver, beim Springen ein kurzer Impuls nach außen, beim Schleichen gedämpft. Übergänge sind weich geglättet.
+
+**Neue Einstellungen** (Goon Cosmetics → Aura): **Intensity** (Dichte, 25–200 %), **Size** (50–200 %), **Speed**
+(25–200 %), **Custom colors** mit **Color 1** und **Color 2**, **Visible to others** (aus = nur du siehst deine Aura).
+Andere Spieler sehen deine Aura mit deinen Einstellungen. Alte Configs laden ohne Änderung (fehlende Werte = Standard).
+
+**Vorschau:** Shop und Inventar zeigen die Aura animiert an deinem Spieler, mit deinen aktuellen Einstellungen.
+
+**Technik und Grenzen:**
+- Die Berechnung steckt in `cosmetics/aura/AuraEngine` (reines Java, ohne Minecraft, getestet in `tools/AuraEngineTest.java`):
+  jedes Teilchen folgt direkt aus Zeit und Seed, deshalb kein Aufploppen, keine Allokationen pro Bild und bei gleichem Seed
+  exakt dasselbe Bild. Gezeichnet wird in `AuraRenderer` als zur Kamera gedrehte Sprites aus `textures/aura/atlas.png`
+  (Generator: `tools/GenerateAuraAtlas.java`).
+- Höchstens **70 Teilchen** pro Aura und Spieler. Detailstufe nach Entfernung: bis 16 Blöcke voll, bei 32 Blöcken etwa
+  20 %, ab 64 Blöcken nichts.
+- Leuchtende Teilchen werden **additiv** gezeichnet (eigene Render-Pipeline nach dem Vorbild von Minecrafts "eyes"),
+  dunkle Teilchen und Rauch normal überblendet. Lässt sich die Pipeline nicht anlegen, wird automatisch "eyes" benutzt.
+- Die Einstellungen gelten für die gewählte Aura (eine gemeinsame Einstellung für alle Auren, nicht je Aura getrennt).
+- Server: neue Felder `auraStyle`, `auraColor1`, `auraColor2` (dafür `server.py` hochladen).
+
+## Update 3.58.0: Auren
+
+- **Neue Cosmetic-Art: Auren.** Eigene Kategorie "Auras" im Goon Shop und im Inventar. Eine Aura umgibt den **ganzen
+  Körper** vom Kopf bis zu den Füßen (nicht nur den Kopf wie Accessoires) und kippt beim Schleichen nicht mit.
+  - **Love Aura** (Uncommon): rosa Herzen steigen langsam am Körper hoch.
+  - **Frost Aura** (Rare): Schneeflocken steigen auf, an den Füßen dreht sich ein Eisring.
+  - **Matrix Aura** (Rare): grüne Code-Streifen rasen am Körper hoch.
+  - **Flame Aura** (Epic): Flammen lodern aus glühender Glut an den Füßen nach oben.
+  - **Lightning Aura** (Epic): zuckende Blitze kreisen um den ganzen Körper.
+  - **Golden Rings** (Legendary): drei goldene Ringe drehen sich an Füßen, Hüfte und Kopf und wippen leicht.
+  - **Void Aura** (Legendary): violette Teilchen wirbeln in einer Spirale nach oben.
+- Auren lassen sich mit Hut, Flügeln, Accessoire und Haustier kombinieren, gehören zu den Outfits und stehen in den
+  Freundes-Stats. Andere GoonClient-Spieler sehen deine Aura (Ausblenden mit "Show other players' accessories").
+- Server: neues Feld `aura` (dafür `server.py` hochladen). Das Server-Relay nutzt jetzt den Kanal `cosmetics_v5`.
+
+## Update 3.57.0: Goon Shop und Haustiere
+
+- **Der Hourly Shop heißt jetzt wieder "Goon Shop"** (Tab, Banner, Meldungen, Missionen, Website). Er funktioniert wie
+  bisher: jede volle Stunde 8 neue Items.
+- **Neue Cosmetic-Art: Haustiere (Pets).** Eigene Kategorie "Pets" im Goon Shop und im Inventar, ein Haustier gleichzeitig.
+  - **Schulter-Haustiere** sitzen auf deiner linken Schulter und bewegen sich mit dir:
+    **Kitten** (Common), **Frog** (Uncommon), **Penguin** (Uncommon), **Fox** (Rare).
+  - **Fliegende Haustiere** schweben neben deinem Kopf, wippen auf und ab und schlagen mit den Flügeln:
+    **Bee** (Uncommon), **Bat** (Rare, rote Augen), **Little Ghost** (Epic, leuchtet), **Baby Dragon** (Legendary,
+    goldene Hörner, leuchtende Flügelspitzen).
+  - In der Beschreibung steht jeweils "Shoulder pet" oder "Flying pet". Die Vorschau zeigt das Haustier an deinem Spieler.
+  - Andere GoonClient-Spieler sehen dein Haustier (über den GoonClient-Server und Server mit GoonClient). Ausblenden mit
+    "Show other players' accessories". Haustiere gehören auch zu den Outfits und stehen in den Freundes-Stats.
+- Server: neues Feld `pet` (dafür `server.py` hochladen). Das Server-Relay nutzt jetzt den Kanal `cosmetics_v4`; Spieler mit
+  älteren Versionen sehen sich über den GoonClient-Server weiterhin, nur nicht ihre Haustiere.
+
+## Update 3.56.0: Exklusive Items per Code – Hacker Orbit
+
+- **Neue Seltenheit "Exclusive"** (pink): Items, die es **nur über einen Redeem-Code** gibt. Sie kommen nie in den
+  Hourly Shop, lassen sich nicht kaufen, nicht verschenken und nicht auf die Wunschliste setzen. Jedes Item, das es
+  künftig per Code gibt, ist exklusiv. Im Inventar steht bei ihnen "Exclusive item - only from a redeem code".
+- **Hacker Orbit** (Accessoire, Exclusive): leuchtend grüne Code-Zeichen (0, 1, <, >, /, #) kreisen in zwei Höhen um
+  den Kopf, dazwischen kleine Datenpunkte. Jeder Pixel flackert einzeln wie auf einem Terminal. Das Gesicht bleibt frei.
+- **Codes können Items geben:** In `codes.json` gibt ein Eintrag mit `"item": "accessory.hackerorbit"` das Item
+  zusätzlich (Coins dürfen dann 0 sein). Neuer Code: `py -3 tools/backend/add_code.py 0 --item accessory.hackerorbit`.
+  Das Item muss im Client als exklusives Item eingebaut sein.
+  - Clients vor 3.56.0 können solche Codes nicht einlösen (der Server antwortet "update GoonClient"), damit niemand
+    den Code verbraucht, ohne das Item zu bekommen.
+  - Wie bei Coins gilt jeder Code pro Konto nur einmal, und das Item ist gegen Bearbeiten der Datei geschützt.
+- Server: `server.py` und `codes.json` hochladen.
+
+## Update 3.55.0: Pack Mixer – Wind Charges
+
+- Neues Abteil **Wind Charges** im Pack Mixer (unter "Ender Pearls"), mit Vanilla und allen Pack-Varianten:
+  - **Wind Charge:** das Item zusammen mit der fliegenden Kugel (`entity/projectiles/wind_charge`); wer die Wind Charge aus
+    einem Pack wählt, bekommt beides.
+  - **Wind Burst:** der Windstoß beim Aufprall (alle Bilder von `particle/gust_*` und `particle/small_gust_*`) als ein Paket.
+
+## Update 3.54.0: Namensschilder in der Tab-Liste und GoonClient-Symbol
+
+- **Tab-Liste:** Animierte Namensschilder und Badges von GoonClient-Spielern erscheinen jetzt auch in der Tab-Liste,
+  genau wie über dem Kopf.
+- **GoonClient-Symbol:** Jeder, der gerade mit GoonClient spielt, hat vor seinem Namen und vor seiner Badge ein kleines
+  lila GoonClient-"G", über dem Kopf und in der Tab-Liste, auch ohne gekaufte Cosmetics. Ausschalten:
+  Goon Cosmetics → "What I see from other players" → **"GoonClient icon"**.
+- **Rang bleibt:** Animiert wird nur noch der Spielername selbst. Rang, Farben und Zusätze des Servers (z.B. "VIP" davor,
+  Clan dahinter) bleiben unverändert; Symbol und Badge stehen direkt vor dem Namen: `VIP [G] BOSS Name blubby`.
+- Spieler außerhalb der Sichtweite werden für die Tab-Liste beim GoonClient-Server nachgefragt (alle 60 Sekunden).
+- Server: `/v1/cosmetics` meldet zusätzlich, wer in den letzten 15 Minuten online war (`"active"`); nur diese Spieler
+  bekommen das Symbol. Dafür `server.py` hochladen. Mit der alten `server.py` bekommt jeder mit Eintrag das Symbol.
+
+## Update 3.53.1: Freunde-Modul repariert
+
+- **Fix: Freunde wurden auf vielen Servern nicht hervorgehoben** (kein Stern, keine Freundesfarbe über dem Kopf, in der
+  Tab-Liste und im Chat, Freund nie "online"). Ursache: Freunde wurden nur über ihre Mojang-UUID erkannt. Offline-Server
+  und manche Proxys geben Spielern aber eine eigene UUID, dort passte sie nie. Jetzt zählt zusätzlich der Name, wenn die
+  UUID nicht passt.
+- **Fix: "Right-click in chat" ging nicht.** Der Rechtsklick hing an einer Methode, die es seit Minecraft 1.21.11 nicht mehr
+  gibt. Jetzt wird beim Rechtsklick im offenen Chat der Name unter der Maus gesucht (wie beim Linksklick von Minecraft)
+  und der Spieler hinzugefügt.
+- Geprüft im Spiel: Freund mit abweichender UUID bekommt Stern und Farbe über dem Kopf und in der Tab-Liste und gilt als
+  online, sein Name im Chat ist markiert, Rechtsklick auf einen Namen im Chat fügt ihn hinzu.
+
+## Update 3.53.0: Download-Bereich und Updater nach Minecraft-Version
+
+- **Website:** Neuer Abschnitt **Download** mit einer Karte pro verfügbarer Minecraft-Version (Version, Größe,
+  Download-Knopf). Alle Download-Knöpfe der Seite springen dorthin. Aktuell gibt es **Minecraft 1.21.11**.
+- **Updater:** Der Client sagt dem Server jetzt, für welche Minecraft-Version er läuft, und bekommt nur Updates für genau
+  diese Version. Ältere Clients bekommen wie bisher die 1.21.11-Version.
+
+## Update 3.52.1: Fix "7b" vor Namen mit animiertem Nametag
+
+- **Fix:** Bei manchen Spielern standen mit animiertem Nametag fremde Zeichen vor dem Namen, z.B. "7b533m" statt "533m".
+  Ursache: Einige Server schreiben alte Minecraft-Farbcodes direkt in den Namen (z.B. "§7§b533m"). Das Nametag färbt den
+  Namen Buchstabe für Buchstabe ein; dabei stand das "§" allein und der Buchstabe dahinter (7, b ...) wurde sichtbar.
+- Jetzt werden diese Codes vor dem Einfärben entfernt (auch Hex-Farben und Fett/Kursiv-Codes). Das animierte Nametag
+  ersetzt die Farben des Servers ohnehin. Geprüft mit "§7§b533m" → "533m", "§7543m" → "543m" und weiteren Fällen.
+- Betrifft Nametags über dem Kopf, in der Tab-Liste und im Chat. Spieler sehen den Fix, sobald **sie selbst** (die den Namen
+  anzeigen) 3.52.1 haben.
+
+## Update 3.52.0: Daily Missions und 8 Items im Hourly Shop
+
+- **Daily Missions** (Tab "Missions", zwischen täglicher Belohnung und den Missionen): jeden Tag **3 neue Aufgaben**,
+  für alle Spieler gleich, z.B. "Play for 30 minutes today", "Play 3 emotes today", "Buy an item in the Hourly Shop",
+  "Claim your daily reward", "Earn 100 coins by playing today" oder "Claim a Battle Pass reward". Nie zwei Aufgaben
+  derselben Art an einem Tag.
+  - Jede Aufgabe gibt beim Abholen **Goon Coins (50–300) und Battle-Pass-XP (100–400)**.
+  - Fortschrittsbalken, "Claim"-Knopf und Countdown bis zu den neuen Aufgaben um Mitternacht. Erledigte Aufgaben werden
+    im Spiel gemeldet. Der Fortschritt zählt nur für den jeweiligen Tag.
+  - Wie die Coins gegen Bearbeiten der Datei geschützt.
+- **Missionen geben Battle-Pass-XP:** wie bisher +250 XP pro abgeholter Mission; das steht jetzt auch in der Liste und in
+  der Meldung beim Abholen.
+- **Hourly Shop: 8 statt 5 Items pro Stunde.** In breiten Fenstern alle in einer Reihe, sonst in zwei Reihen zu 4.
+
+## Update 3.51.2: Pack Mixer – Varianten scrollen
+
+- **Fix:** Mit vielen Texture Packs verschwanden im Pack Mixer Varianten: Der Inspector zeigte nur so viele Kacheln, wie
+  unten Platz hatten; alle weiteren Packs waren nicht erreichbar. Außerdem wurde die große Vorschau mit jeder Zeile kleiner.
+- Die Varianten-Kacheln im Inspector lassen sich jetzt mit dem **Mausrad scrollen** (rechts zeigt eine schmale Leiste die
+  Position, unten steht z.B. "30 packs - scroll for more"). Die große Vorschau bleibt dabei groß. Beim Wechsel zu einem
+  anderen Teil beginnt die Liste wieder oben.
+- Geprüft im Spiel mit 30 Packs, die alle das Diamantschwert ändern: alle 31 Varianten (Vanilla + 30) sind erreichbar.
+
+## Update 3.51.1: Item Scale nur für Items auf dem Boden
+
+- **Fix:** Eine eigene Größe für den End-Kristall in der Item-Liste von **Item Scale** hat auch **platzierte** End-Kristalle
+  (die Entity) riesig gemacht. Die Item-Liste gilt jetzt nur noch für **gedroppte Items** auf dem Boden; platzierte
+  Kristalle, Blöcke und andere Entities bleiben normal groß. In der Liste steht das als Hinweis unter dem Regler.
+
+## Update 3.51.0: Theme "Monochrome"
+
+- **Neues Theme "Monochrome"** (Goon Cosmetics → Themes): Schwarz, Grau und Weiß ohne Farbakzent, passend zur Website.
+  Hintergrund fast schwarz, Flächen in dunklem Grau, Auswahl und Hervorhebungen in hellem Grau/Weiß.
+- Auf dem hellen Akzent werden Schalter-Knöpfe und das "G" im Logo automatisch dunkel gezeichnet, damit sie sichtbar
+  bleiben (die anderen Themes sehen aus wie bisher).
+
+## Update 3.50.1: Update-Fenster kommt zuverlässig
+
+- **Fix:** Das Update-Fenster ("Neues Update verfügbar!" mit "Jetzt herunterladen" / "Später") kam oft nicht. Ursache:
+  Der Client fragte nur einmal beim Spielstart nach einem Update. Schlug diese Abfrage fehl (z.B. weil der Server auf
+  Render gerade aufwacht oder neu deployt wird), wurde erst nach 3 Stunden wieder gefragt. Außerdem prüfte das Fenster
+  nur im allerersten Moment beim Öffnen des Menüs.
+- Jetzt fragt der Client **bei jedem Öffnen des GoonClient-Menüs** (Öffnungstaste) nach einem Update (höchstens alle
+  30 Sekunden), nach einem Fehler außerdem automatisch alle 2 Minuten. Kommt die Antwort erst, während das Menü schon
+  offen ist, erscheint das Fenster sofort. "Später" blendet es bis zum nächsten Spielstart aus.
+
+## Update 3.50.0: Battle Pass mit eigenem Tab und seitlich scrollender Leiste
+
+- **Battle Pass statt Monats-Season-Pass:** Die Season wechselt nicht mehr automatisch jeden Monat, sondern läuft, bis
+  eine neue Season eingebaut wird (kein Enddatum). Aktuell: **Season 1: Neon Nights** mit allen 7 limitierten Cosmetics
+  (Volt, Circuit, Robot, Data Cubes, Cyber Helmet, Circuit Wings, Synthwave). Free- und Premium-Track (1000 Coins)
+  bleiben wie in 3.49.
+- **Eigener Tab "Battle Pass"** in der Seitenleiste, unter dem Event-Shop und über "Missions" (dort ist der Pass nicht
+  mehr).
+- **Seitlich scrollende Leiste statt Tabelle:** Alle 30 Stufen nebeneinander, oben die Free-Belohnung, unten die
+  Premium-Belohnung, dazwischen die Stufen-Leiste mit dem Fortschritt. Items mit Live-Vorschau, Coins mit Münze.
+  Scrollen mit dem Mausrad, den Pfeilen oder der Leiste darunter; beim Öffnen springt sie zur aktuellen Stufe.
+  Abholbare Belohnungen leuchten ("CLAIM"), Klick = abholen. Unten zeigt ein Detailbereich die angeklickte Belohnung groß.
+- Wer im alten Monats-Pass schon XP oder Premium hatte, behält beides in Season 1; Stufen, die jetzt ein Item geben,
+  können noch einmal abgeholt werden.
+- Neue Season: Bescheid sagen, dann wird sie mit neuen Cosmetics als Season 2 eingebaut (Client-Update).
+
+## Update 3.49.1: Season-Pass zeigt die nächste Season
+
+- Hat die laufende Season keine eigenen Cosmetics (z.B. Oktober 2026), zeigt der Season-Pass unten die Cosmetics der
+  **nächsten** Season als Vorschau ("Coming next season: November 2026 - Neon Nights", Karten mit "Soon").
+- In den **letzten 24 Stunden** einer Season kann man Premium nicht mehr kaufen ("Premium closed"), damit niemand
+  1000 Coins für ein paar Stunden Premium bezahlt. Premium der neuen Season gibt es ab ihrem Start.
+
+## Update 3.49.0: Free und Premium Season-Pass mit limitierten Season-Cosmetics
+
+- **Zwei Tracks:** Jede der 30 Stufen hat jetzt eine **Free**-Belohnung (obere Reihe) und eine **Premium**-Belohnung
+  (untere Reihe, mit Goldrand). Den **Premium-Pass** kauft man im Season-Pass für **1000 Goon Coins** pro Season
+  (zweiter Klick bestätigt). Schon erreichte Stufen können danach sofort auch premium abgeholt werden; XP und
+  Free-Belohnungen bleiben. Mit der nächsten Season läuft Premium ab, gewonnene Items bleiben für immer.
+- **Premium gibt mehr:** mehr Cosmetics (5 statt 2) und mehr Coins (Premium-Coins: 165 bis 585 pro Stufe,
+  Stufe 10/20 sogar 1500/3000, zusammen gut 13.000 extra).
+- **Limitierte Season-Cosmetics "Neon Nights" (Season November 2026),** nur im Season-Pass, nie im Shop, nicht
+  verschenkbar:
+  - Free: **Volt** Badge (Stufe 8, flackerndes Neon-Schild "⚡VOLT"), **Circuit** Nametag (Stufe 20, Datenpakete rasen
+    durch den Namen).
+  - Premium: **Robot** Emote (Stufe 6), **Data Cubes** (Stufe 12, vier leuchtende Würfel kreisen um den Kopf),
+    **Cyber Helmet** (Stufe 18, Helm mit Cyan-Visier und Antenne), **Circuit Wings** (Stufe 24, Platinen mit leuchtenden
+    Leiterbahnen), **Synthwave** Cape (Stufe 30, Legendary, animiert: gestreifte Sonne über einem Neon-Gitter).
+  - Unter den Stufen zeigt der Season-Pass alle Season-Cosmetics mit Vorschau; im Inventar steht bei ihnen, aus welcher
+    Season und Stufe sie stammen.
+- Seasons ohne eigene Cosmetics geben auf diesen Stufen Coins. Neue Season-Cosmetics für spätere Monate brauchen ein
+  Client-Update (die Designs sind eingebaut).
+- Premium-Stand und Premium-Belohnungen sind wie die Coins gegen Bearbeiten der Datei geschützt.
+- Server: das neue Emote "Robot" ist freigeschaltet (dafür `server.py` hochladen).
+
+## Update 3.48.0: Wunschliste, Outfits, Season-Pass und Geschenke
+
+- **Wunschliste:** Im Inventar zeigt der neue Schalter **"Show locked"** auch Items, die dir noch nicht gehören
+  (abgedunkelt, mit Preis und "In shop", wenn sie gerade im Hourly Shop sind). Mit **"Add to wishlist"** markierst du sie
+  (Herz). Taucht ein markiertes Item im Hourly Shop auf, gibt es eine Meldung (oben im Bild und im Chat), einmal pro Stunde.
+- **Outfits:** Oben im Inventar speicherst du deinen aktuellen Look (Cape, Hut, Flügel, Accessoire, Nametag, Badge) unter
+  einem Namen, bis zu 8 Outfits. Anklicken und **"Wear"** zieht alles mit einem Klick an; leere Plätze werden abgelegt,
+  Items, die dir nicht (mehr) gehören, übersprungen. "Save current look" aktualisiert ein Outfit, "Delete" löscht es.
+- **Season-Pass (kostenlos):** Jeden Monat eine neue Season mit **30 Stufen**, zu sehen im Tab "Missions".
+  XP gibt es für aktive Spielzeit (+10 pro Minute), die tägliche Belohnung (+100) und jede abgeholte Mission (+250);
+  alle 500 XP eine Stufe (volle Season etwa 25 Stunden). Jede Stufe gibt Goon Coins: meist 110 bis 290, jede 5. Stufe 500,
+  Stufe 10/20/30 sogar 1000/2000/3000 (zusammen 13.500 pro Season). Leuchtende Stufe anklicken = abholen. Am Monatsende
+  beginnt die nächste Season bei 0, nicht abgeholte Belohnungen verfallen.
+- **Geschenke an Freunde:** In den Stats eines bestätigten Freundes (Friends-Tab, "Stats") gibt es "Send a gift":
+  100, 500, 1000 oder 5000 Goon Coins oder ein Item aus dem aktuellen Hourly Shop, das der Freund noch nicht hat
+  (du zahlst den Preis). Zweiter Klick bestätigt.
+  - Zustellung über den Server, auch wenn der Freund gerade offline ist; er bekommt eine Meldung, sobald er online ist,
+    und du eine, wenn er es erhalten hat.
+  - Ein Server-Neustart kann kein Geschenk verlieren: Dein Client schickt es erneut, bis der Freund es hat, und sein
+    Client schreibt jedes Geschenk nur einmal gut. Hat der Freund das Item inzwischen, bekommt er dessen Preis als Coins.
+  - Beide brauchen 3.48.0. Höchstens 20 Geschenke gleichzeitig unterwegs.
+- Season-Stand, verschickte und empfangene Geschenke sind wie die Coins gegen Bearbeiten der Datei geschützt.
+- Server: neue Routen `/v1/gifts`, `/v1/gifts/send`, `/v1/gifts/claim` (dafür `server.py` hochladen).
+
+## Update 3.47.0: Freunde gehen nicht mehr verloren, Update-Fenster
+
+- **Fix: Freunde verschwanden und mussten neu angefragt werden.** Ursache: Der Server läuft auf Render im Gratis-Plan,
+  dort wird die Datenbank-Datei bei **jedem Neustart gelöscht** (nach jedem Deploy und wenn Render den schlafenden Server
+  wieder aufweckt). Damit waren alle Freundschaften und offenen Anfragen weg.
+- **Jetzt stellt der Client Freundschaften selbst wieder her:** Jeder Client kennt seine Freundesliste lokal. Fehlt ein
+  Freund beim Server, schickt der Client still eine neue Anfrage; kommt eine Anfrage von jemandem, der schon in der
+  eigenen Freundesliste steht, wird sie still angenommen. Sobald beide einmal online waren, seid ihr automatisch wieder
+  Freunde, ohne Klicken und ohne Chat-Meldungen. Fremde Anfragen werden nie automatisch angenommen.
+  - Pro Freund höchstens eine automatische Anfrage pro Spielstart (geht die Freundschaft mitten im Spiel erneut verloren,
+    wird erneut angefragt). Wer einen Freund wirklich loswerden will, entfernt ihn aus der Liste.
+  - Damit es greift, brauchen **beide** Spieler Version 3.47.0. Freundschaften, die schon verloren sind, kommen so auch
+    zurück, solange der Freund noch in der lokalen Liste steht.
+- **Update-Fenster:** Gibt es eine neue Version, erscheint beim Öffnen des GoonClient-Menüs ein Fenster mit Version und
+  den wichtigsten Neuerungen und zwei Knöpfen: **"Jetzt herunterladen"** (lädt und prüft das Update sofort, mit
+  Fortschrittsbalken; installiert wird beim Schließen von Minecraft) und **"Später"** (oder Esc; das Fenster kommt beim
+  nächsten Spielstart wieder). Das gilt ab dem **nächsten** Update nach 3.47.0.
+
+## Update 3.46.0: Event-System, tägliche Belohnung und Missionen
+
+- **Event-System statt fest eingebautem Halloween:** Event-Shops (Name, Start, Ende, Währung, Coins pro Minute, Farbe,
+  Aussehen, Items) kommen jetzt aus `tools/backend/events.json`. Neue Termine, Verlängerungen oder ein neues Event mit
+  schon eingebauten Items brauchen **keine neue Client-Version**: Datei ändern, hochladen, fertig (gilt sofort, ohne
+  Neustart; der Client fragt alle 30 Minuten nach und merkt sich die Liste für Spielen ohne Verbindung).
+  - Mehrere Events gleichzeitig möglich, jedes mit eigenem Tab "<Name> Shop", eigenem Banner im Hourly Shop und eigener,
+    geschützter Währung. Aussehen: `"theme": "halloween"` (Kürbis, Fledermäuse), `"winter"` (Schnee) oder `"default"`.
+  - Zeiten mit Zeitzone angeben, z.B. `"start": "2026-12-20T00:00:00+01:00"`. Ein Event dauert höchstens 62 Tage.
+  - Neue Event-Items selbst (Designs) brauchen weiterhin ein Client-Update; Items, die der Client nicht kennt, ignoriert er.
+  - Das Halloween-Event läuft genau wie bisher (bis 7.11.2026), Halloween Coins und gekaufte Items bleiben erhalten.
+- **Tägliche Belohnung mit Login-Streak:** einmal pro Tag Goon Coins abholen: Tag 1 bis 7 gibt 50, 75, 100, 150, 200,
+  300 und **600** Coins, danach beginnt die Woche von vorn (die Streak zählt weiter). Wer einen Tag auslässt, fängt wieder
+  bei Tag 1 an. Erinnerung beim Betreten einer Welt und ein Banner im Hourly Shop. Uhr zurückstellen bringt nichts.
+- **Missionen und Erfolge:** 23 Ziele mit Coin-Belohnung, z.B. "Warming Up" (1 Stunde spielen, +100), "Collector"
+  (10 Items, +400), "Dance Machine" (100 Emotes, +500), "Full Week" (7 Tage Streak, +500), "Money Printer" (Coin Upgrader
+  voll, +2500), "No Life" (100 Stunden, +4000). Erreichte Missionen werden gemeldet und per Knopf abgeholt ("Claim all").
+  Spielzeit, Käufe, Codes und Upgrades von früher zählen sofort mit.
+- **Neuer Tab "Missions"** mit der Streak-Woche (7 Kacheln, Countdown bis Mitternacht) und allen Missionen mit
+  Fortschrittsbalken; im Titel steht, wie viele Belohnungen bereitliegen.
+- Streak, Emote-Zähler und abgeholte Missionen sind wie die Coins gegen Bearbeiten der Datei geschützt; alte Konten bleiben
+  gültig.
+- Server: neue Route `GET /v1/events` und neue Datei `events.json` (dafür `server.py` und `events.json` hochladen).
+
+## Update 3.45.0: Limitierter Halloween Shop mit Halloween Coins
+
+- **Neue limitierte Währung "Halloween Coins":** Während des Events gibt es pro Minute aktiver Spielzeit zusätzlich
+  3 Halloween Coins (unabhängig vom Coin Upgrader, AFK zählt nicht). Sie sind wie die Goon Coins gegen Bearbeiten der Datei
+  geschützt.
+- **Neuer Tab "Halloween Shop"** (mit Kürbis-Icon, nur während des Events sichtbar): Halloween-Coins-Guthaben, ein
+  **Countdown** (Tage, Stunden, Minuten, Sekunden) und das Ablaufdatum. Der Shop verschwindet am **7. November 2026 um
+  00:00 Uhr** (deutsche Zeit). Im Hourly Shop führt ein Banner mit Restzeit direkt dorthin.
+- **15 limitierte Items** (nur mit Halloween Coins, nie im Hourly Shop):
+  - Hüte: Reaper Hood (dunkle Kapuze mit roten Augen), Jack-o'-Lantern (leuchtender geschnitzter Kürbis).
+  - Flügel: Skeleton Wings (aus Knochen), Vampire Wings (rote Fledermausflügel mit leuchtenden Kanten).
+  - Accessoires: Vampire Fangs, Spider Buddy (Spinne auf dem Kopf), Orbiting Ghosts (Legendary, drei kleine Geister kreisen).
+  - Capes (animiert): Lantern (Kürbisgesicht mit flackernder Kerze), Haunted (Geister steigen durch die Nacht auf).
+  - Badges: R.I.P. (pulsierend), BOO! (flackert orange und lila).
+  - Nametags: Spooky (orange und lila, mit Flackern), Haunted (Buchstaben verblassen wie Geister).
+  - Emotes: Zombie Walk, Boo! (zusammenkauern und hochspringen).
+- Gekaufte Halloween-Items bleiben für immer im Inventar (dort mit "Limited Halloween 2026 item" markiert).
+- Server: die zwei neuen Emotes sind freigeschaltet (dafür `server.py` neu hochladen).
+
+## Update 3.44.0: 49 neue Shop-Items
+
+- **8 neue Emotes** (schlicht und sauber animiert): Thumbs Up, Point, Shrug, Clap, Think, Facepalm, Bow, Cheer.
+- **9 neue Capes:** Ash, Mint, Cherry, Toxic, Pumpkin, Glacier, dazu animiert Storm (Blitze), Lava und Nebula (Legendary).
+- **10 neue Badges:** Check ✔, Music ♫, Snow ❄, Anchor ⚓, Peace ☮, Sword ⚔ und Infinity ∞ (pulsierend), Atom ⚛ und
+  Comet ☄ (schimmernd), Galaxy ✺ (Regenbogen).
+- **6 neue Nametags:** Candy (rollende Zuckerstangen-Streifen), Ocean (Wellen mit Schaum), Sunset, Matrix (flackernder Code),
+  Lava (glühende Risse) und Hologram (Legendary, Scan-Licht).
+- **6 neue Hüte:** Headband, Party Hat, Santa Hat, Witch Hat, Propeller Cap (der Propeller dreht sich) und Star Crown
+  (Legendary, Regenbogen-Sterne kreisen um die Krone).
+- **3 neue Flügel:** Butterfly Wings, Shadow Wings (violett leuchtende Kanten), Ice Wings (leuchtende Eiskristalle).
+- **7 neue Accessoires:** Mustache, Bow Tie, Monocle, Bandana, Flower Crown, Spirit Wisps (schwebende Geister-Lichter) und
+  Golden Aura (Legendary, ein Ring aus goldenem Licht).
+- Alle neuen Items kommen ganz normal in den Hourly Shop (Seltenheit bestimmt, wie oft sie auftauchen).
+- Server: die neuen Emotes sind freigeschaltet, damit andere Spieler sie sehen (dafür `server.py` neu hochladen).
+
+## Update 3.43.1: HUD-Editor ohne Unschärfe
+
+- **Fix:** Im HUD-Editor ("Move HUD elements") war alles weichgezeichnet, auch die Elemente, die man verschiebt. Jetzt bleibt
+  alles scharf und in echter Farbe, ohne Abdunklung.
+- Die Prozent-Angaben an den Elementen und das Kreuz über den ganzen Bildschirm sind weg. Beim Element unter der Maus
+  stehen nur noch sein Name und eine leichte Hervorhebung.
+- Der Hinweis zur Bedienung ist eine kleine Leiste oben in der Mitte, die nach ein paar Sekunden ausblendet.
 
 ## Update 3.43.0: Halloween-Theme und ruhigeres Menü-Design
 
