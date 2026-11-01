@@ -456,6 +456,51 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.79.0: Reittiere (Mounts)
+
+Neue Item-Art **Mount**: Du sitzt sichtbar im Sattel, das Reittier läuft unter dir mit. Mounts kommen wie alle anderen Items in die normale stündliche Rotation des Goon Shops, es gibt keinen eigenen Shop-Tab. Im Inventar haben sie einen eigenen Chip "Mounts".
+
+**Fairness: Kosmetisch, ohne Spielvorteil.** Kein Tempo, kein Sprung, kein Fliegen, gleiche Hitbox, gleiche Reichweite, kein Server-Paket für die Bewegung. Gezeichnet wird nur anders: Der Spieler wird beim Zeichnen angehoben, seine echte Position ändert sich nie. Fliegende Reittiere schweben nur optisch.
+
+| Reittier | Id | Seltenheit | Preis |
+|---|---|---|---|
+| Pony | `mount.pony` | Common | 40 |
+| Donkey (Esel) | `mount.donkey` | Common | 50 |
+| Saddled Pig (Schwein mit Sattel) | `mount.pig` | Common | 60 |
+| White Horse (mit Zaumzeug) | `mount.horse_white` | Uncommon | 100 |
+| Great Wolf | `mount.wolf` | Uncommon | 120 |
+| Carpet Llama (Lama mit Decke) | `mount.llama` | Uncommon | 150 |
+| Skeleton Horse (leuchtende Augen) | `mount.skeleton_horse` | Rare | 240 |
+| Polar Bear | `mount.polar_bear` | Rare | 320 |
+| Ocelot Panther | `mount.panther` | Rare | 400 |
+| Dragon Whelp (mit Flügeln) | `mount.dragon` | Epic | 600 |
+| Magma Cube (leuchtet, Funken) | `mount.magma` | Epic | 800 |
+| Root Stag (Geweih, Moos, Blüten) | `mount.root_stag` | Epic | 1000 |
+| Phoenix (schwebt, Glut) | `mount.phoenix` | Legendary | 2000 |
+| Cloud Whale (schwebt, Wellen) | `mount.cloud_whale` | Legendary | 2400 |
+| Rainbow Unicorn (Sternenstaub) | `mount.unicorn` | Legendary | 3000 |
+
+"No Mount" (`mount.none`) gehört jedem und heißt: kein Reittier.
+
+- **Animation:** Stehen (Atmen, Schweif, Ohren, Schnauben), Gehen, Traben, Galopp im versetzten Viertakt beim Sprinten, Sprung, Landung, Schleichen, Schwimmen, Fallen. Alles zeitbasiert und weich überblendet. Der Reiter wippt mit, beugt sich im Galopp vor und hält die Zügel, solange er nichts benutzt oder schlägt.
+- **Reaktionen:** Bei Schaden oder Emote hebt das Tier den Kopf. Streicheln mit `/mount` oder der Taste "Mount key" zeigt Freude und Herzen. `/mount` ist ein reiner Client-Befehl.
+- **Effekte:** Funken, Glut, Blätter, Wolkenstaub, Sternenstaub und Staub bei der Landung. Dezent und abschaltbar.
+- **Vorschau:** Im Shop und Inventar sitzt dein Spieler animiert im Sattel, mit Stand, Walk, Gallop, Jump und einem Regler zum Drehen.
+- **Einstellungen** (Inventar und Goon Cosmetics): Size, Animation, Effects, Visible to others, Show in first person, Mount key, dazu die Anzeige "Mount render active: yes/no".
+- **Sync:** Neues Feld `mount` im Backend und im Netzwerk-Paket (`cosmetics_v8`, Protokoll 8). Alte Clients ignorieren es, alte Einträge ohne das Feld gelten als "kein Reittier", unbekannte Ids werden nicht gezeichnet.
+- **Leistung:** Ab 32 Blöcken einfachere Animation ohne Partikel, ab 64 Blöcken wird nichts gezeichnet, höchstens 24 Reittiere gleichzeitig.
+- **Texturen:** Reproduzierbar mit `tools/GeneratePets.java`, die Modelle stehen in `MountModels.java`.
+
+**Grenzen**
+
+- `tools/backend/server.py` muss auf dem Backend ersetzt werden. Ohne das verwirft das alte Backend das Feld, andere Spieler sehen dein Reittier dann nicht.
+- Andere Spieler sehen dein Reittier in normaler Größe, Size und Animation gelten nur auf deinem Bildschirm.
+- Ob ein anderer Spieler sein Reittier wirklich besitzt, lässt sich nicht prüfen, wie bei allen Cosmetics. Es hat keinen Einfluss auf das Spiel.
+- Vor einer Wand rutscht das Modell bis zu 0,55 Blöcke zurück. Bei langen Tieren kann der Kopf trotzdem in den Block ragen, in engen Gängen auch der Rumpf.
+- Das Cape kann hinten durch das Tier gehen, ein Pop-Chams-Wireframe erscheint auf Höhe des Spielers ohne Anheben.
+- Beim Elytra-Flug, Schlafen, Kriechen und Schwimmen im Spielerstil, in Booten und unsichtbar wird das Reittier ausgeblendet.
+- Ein frei wählbares Namensschild für das Reittier gibt es noch nicht.
+
 ## Update 3.78.0: Wolken lassen sich wieder ausschalten
 
 - **Fehler:** Mit einem Sky, der eigene Wolken hat (zum Beispiel Cotton Clouds), blieben diese sichtbar, obwohl in den Videoeinstellungen von Minecraft "Clouds: Off" eingestellt war.

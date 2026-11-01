@@ -80,6 +80,7 @@ DEFAULTS = {
     "auraStyle": AURA_STYLE_DEFAULT, "auraColor1": 0xFFFFFF, "auraColor2": 0xFFFFFF,
     "petStyle": PET_STYLE_DEFAULT,
     "font": "",
+    "mount": "",
 }
 
 
@@ -137,6 +138,7 @@ def clean_cosmetics(raw):
         "petStyle": clean_pet_style(raw.get("petStyle")),
         # Schrift des Namens (ab Client 3.61.0); ältere Clients schicken sie nicht und bekommen ""
         "font": as_id(raw.get("font")),
+        "mount": as_id(raw.get("mount")),
     }
 
 
