@@ -79,6 +79,7 @@ DEFAULTS = {
     "hat": "", "wings": "", "accessory": "", "pet": "", "aura": "",
     "auraStyle": AURA_STYLE_DEFAULT, "auraColor1": 0xFFFFFF, "auraColor2": 0xFFFFFF,
     "petStyle": PET_STYLE_DEFAULT,
+    "font": "",
 }
 
 
@@ -134,6 +135,8 @@ def clean_cosmetics(raw):
         "auraColor2": as_int(raw.get("auraColor2"), 0, 0xFFFFFF, 0xFFFFFF),
         # Haustier-Einstellungen (ab Client 3.60.0): Größe | Animation << 8 | Effekte << 16
         "petStyle": clean_pet_style(raw.get("petStyle")),
+        # Schrift des Namens (ab Client 3.61.0); ältere Clients schicken sie nicht und bekommen ""
+        "font": as_id(raw.get("font")),
     }
 
 

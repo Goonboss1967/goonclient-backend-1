@@ -456,6 +456,99 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.61.0: Schriften im Goon Shop
+
+Neue Shop-Kategorie **Fonts**: Du kaufst eine Schrift mit Goon Coins und rüstest sie im Inventar aus. Sie gilt für deinen Namen über dem
+Kopf, im Chat und in der Tab-Liste und funktioniert zusammen mit Nametag-Farben, Animationen, Badges und Chat-Animation.
+
+| Schrift | Seltenheit | Preis | Look |
+|---|---|---|---|
+| Default | Starter | 0 | normale Minecraft-Schrift, gehört jedem, bedeutet "keine Schrift" |
+| Pixel Classic | Common | 30 | breite, eckige Pixel-Blöcke |
+| Rounded | Common | 45 | dicke Linien mit runden Enden |
+| Bold Block | Uncommon | 90 | schwer und breit |
+| Thin Line | Uncommon | 120 | eine feine Linie (am besten ab GUI-Skala 2) |
+| Typewriter | Uncommon | 150 | Serifen, alle Zeichen gleich breit |
+| Gothic | Rare | 240 | breite Feder, gebrochene Bögen, Fraktur-Stil |
+| Script | Rare | 280 | geneigte Schreibschrift mit kleinen Ausläufen |
+| Retro Arcade | Rare | 320 | breite Blöcke mit Bildröhren-Streifen |
+| Cyber | Rare | 380 | eckig, in der Mitte durchgeschnitten |
+| Neon Tube | Epic | 600 | heller Kern mit dunklerer Leucht-Kontur |
+| Graffiti | Epic | 780 | fette Sprühbuchstaben, die tanzen und manchmal tropfen |
+| Runic | Epic | 950 | nur gerade, geritzte Striche |
+| Royal | Legendary | 1600 | Serifen, kleine Krone auf Großbuchstaben |
+| Glitch | Legendary | 2100 | versetzte Scheiben und ein blasser Doppelgänger |
+| Cosmic | Legendary | 2600 | hohle Sternenstaub-Buchstaben mit kleinen Sternen |
+
+- **Kaufen:** Der Goon Shop hat oben jetzt die Tabs `Hourly items` und `Fonts`. Schriften sind dauerhaft im Tab `Fonts` zu haben und
+  kommen nicht in die stündliche Rotation (die bleibt dadurch für alle Versionen gleich). Kauf mit Bestätigung, Doppelkauf-Schutz,
+  Speicherung in `wallet.json` wie bei allen Items. Alte `wallet.json`-Dateien laden ohne Verlust.
+- **Ausrüsten:** Inventar, Tab `Fonts`, oder `Goon Cosmetics > Settings > Fonts`. Nicht gekaufte Schriften stehen dort als `Locked` und
+  lassen sich nicht wählen. Auch Outfits merken sich die Schrift; ältere Outfits lassen sie unverändert.
+- **Vorschau:** Karten zeigen deinen Namen in der Schrift mit dem ausgerüsteten Nametag-Stil. Der Detailbereich zeigt zusätzlich einen
+  Chat-Satz und eine Tab-Zeile.
+- **Einstellungen:** `Font in chat`, `Font in nametag`, `Font in tab list` (je an/aus, Standard an) in `Goon Cosmetics > Settings > Fonts` und
+  im Inventar. Dazu `Show other players' fonts` bei den Ansichts-Einstellungen. Die Schalter gelten für alles, was DU siehst.
+- **Abgedeckte Zeichen:** A-Z, a-z, 0-9, `_`, `-`, Leerzeichen. Alles andere (`ä`, `[`, `★` ...) kommt über den Verweis auf `minecraft:default`
+  aus der Standard-Schrift, es entstehen keine Kästchen.
+- **Breiten:** Nametag-Band, Badge-Position, Chat-Umbruch und Tab-Liste rechnet Minecraft selbst über die Font-Metriken. Schriften sind
+  breiter als Standard (`xX_Steve-99`: 64 Pixel Standard, 73 bis 106 Pixel je Schrift), die Tab-Liste wird dadurch breiter.
+- **Grenzen:**
+  - Fremder Besitz lässt sich nicht prüfen, wie bei allen Items: Wer die Datei manipuliert, kann bei anderen jede bekannte Schrift zeigen.
+  - Fremde Spieler zeigen nur Schriften, die dieser Client kennt; unbekannte Ids werden still zur Standard-Schrift.
+  - Bei GUI-Skala 1 werden die 2-fach aufgelösten Zeichen grob, feine Details (Thin Line, Cosmic) können verschwinden.
+  - Badge-Text und das GoonClient-Symbol behalten ihre Schrift, nur der Name ändert sich.
+  - Eine eigene Schrift für das GoonClient-Menü ist nicht enthalten (optional im Auftrag, bewusst weggelassen).
+- **Defekte Dateien:** Fehlt eine Datei oder ist sie kaputt, gilt die Standard-Schrift. Es gibt einen Eintrag im Log und einen roten Hinweis
+  in `Goon Cosmetics > Settings > Fonts`. Geprüft wird beim ersten Benutzen und danach höchstens alle 30 Sekunden.
+- **Lizenz:** Alle Schriften sind selbst erstellt: `tools/GenerateFonts.java` zeichnet jeden Buchstaben aus eigenen Linienzügen. Es steckt keine
+  fremde Schriftdatei darin, deshalb gibt es keine fremden Lizenztexte. Der Rückfall nutzt die im Spiel vorhandene Minecraft-Schrift.
+
+**Schriften neu erzeugen** (nach `gradlew clientClasses`, schreibt `assets/goonclient/font/*.json` und `textures/font/*.png`; Kontaktbögen:
+`build/font_sheet.png`, `build/font_sheet_big.png`):
+
+```
+javac -encoding UTF-8 -cp build\classes\java\client -d build\tools tools\GenerateFonts.java
+java -cp "build\tools;build\classes\java\client" GenerateFonts
+```
+
+**Tests:** `tools/FontLogicTest.java` (Katalog, Preisbänder, Kauf, Ids, Zeichenabdeckung, Alt-Daten, Atlas-Konsistenz),
+`tools/BackendIntegrationTest.java` und `tools/backend/test_backend.py` (Rundlauf, ungültige Ids, Alt-Daten).
+
+**Protokoll:** `cosmetics_v7` (Protokoll 7, neues Feld `font`). Alte Clients bekommen die neuen Pakete nicht. Einträge ohne `font` gelten als Standard-Schrift.
+
+**Hochladen:** `tools/backend/server.py` im Repo `Goonboss1967/goonclient-backend` ersetzen und den Ordner `tools/backend/site` hochladen, danach
+"Manual Deploy" auf Render. Ohne die neue `server.py` verwirft das Backend das Feld `font`: Andere Spieler sehen deine Schrift dann nicht,
+auf Servern ohne GoonClient-Relay also gar nicht. Du selbst siehst sie trotzdem, Kauf und Ausrüsten funktionieren.
+
+## Update 3.60.0: Haustiere komplett überarbeitet
+
+Alle acht Haustiere (Kitten, Frog, Penguin, Bee, Fox, Bat, Little Ghost, Baby Dragon) sind neu gebaut: Chibi-Modelle aus vielen
+kleinen Teilen, eigene Pixel-Art-Texturen und Animationen, die auf den Spieler reagieren.
+
+- **Modelle und Texturen:** `cosmetics/pet/PetModels` beschreibt die Modelle als reine Daten. `tools/GeneratePets.java` malt die
+  Texturen (`textures/pet/<id>.png`) und eine Kontaktübersicht (`build/pet_textures.png`). Nach einer Modelländerung neu erzeugen.
+- **Animation:** Atmen, Blinzeln in unregelmäßigen Abständen und zufällige Idle-Aktionen. Bodentiere folgen dem Spieler federnd
+  und bleiben auf dem Gelände, der Frosch hüpft, Flieger ziehen eine 8er-Bahn, neigen sich in Kurven und schwingen beim Stoppen nach.
+- **Reaktionen:** Der Kopf schaut zum Spieler. Das Tier hüpft beim Sprung mit, duckt sich beim Schleichen und erschrickt bei Schaden.
+- **Streicheln:** `/pet` oder die Taste `Pet key` im Pet-Cosmetic: Hüpfer, Augen zu, Herzchen. Das sieht nur der Streichelnde selbst.
+- **Platz:** Tiere bleiben neben oder hinter dem Spieler und in der Ego-Ansicht weiter außen. Sie weichen Wänden aus und kommen ab
+  10 Blöcken Abstand mit einem kleinen Teleport-Effekt zurück.
+- **Änderung:** Es gibt keine Schulter-Tiere mehr. Die früheren Schulter-Tiere laufen jetzt neben dem Spieler her. Die Texte im Shop
+  sagen "Walking pet" oder "Flying pet".
+- **Einstellungen im Pet-Cosmetic:** `Size` (50-200 %), `Animation` (0-150 %), `Effects`, `Visible to others`, `Pet key`. Sie gelten
+  für das gewählte Tier, nicht je Tier. Alte Configs laden weiter (Standardwerte für die neuen Felder).
+- **Leistung:** Teile werden einmal vorberechnet, die Animation arbeitet auf wiederverwendeten Objekten. Ab 32 Blöcken läuft eine
+  einfachere Animation ohne Partikel, ab 64 Blöcken wird nichts mehr gezeichnet.
+- **Vorschau:** Shop und Inventar zeigen das Tier lebendig neben dem Spieler.
+- **Tests:** `tools/PetAnimatorTest.java` prüft Winkel, NaN, stetige Übergänge, Federung, Abstand beim Dauerlauf, Teleport, Gelände
+  und alte Configs.
+
+**Fehler aus 3.59.0 behoben:** Der Kanal `cosmetics_v5` hatte neue Felder ohne neue Kennung bekommen. Jetzt gilt `cosmetics_v6`
+(Protokoll 6, neues Feld `petStyle`). `Visible to others` wirkte erst nach einer weiteren Änderung, jetzt sofort.
+
+**Hochladen:** `tools/backend/server.py` (speichert `petStyle`) und den Ordner `tools/backend/site`, danach "Manual Deploy" auf Render.
+
 ## Update 3.59.0: Auren komplett überarbeitet
 
 Alle sieben Auren sind neu gebaut: weiche, leuchtende Teilchen statt harter Quadrate, erkennbare Formen, Schichten
