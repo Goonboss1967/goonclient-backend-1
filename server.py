@@ -44,7 +44,6 @@ Schnittstelle (alles JSON):
   POST /v1/gifts/send   {"id", "to", "coins", "item"} -> {"status": "pending" | "claimed"} (wiederholbar mit derselben Id)
   GET  /v1/gifts                           -> {"incoming": [{"id","from","fromName","coins","item"}], "sent": {"<id>": claimed}}
   POST /v1/gifts/claim  {"id"}             -> {"ok": true}, 404 ohne solches Geschenk
-  GET  /v1/time                            -> {"now": <Sekunden UTC>} (Zeitabgleich für den Hourly Shop)
   GET  /v1/events                          -> {"events": [...]} aus events.json (Event-Shops: Termine, Währung, Items;
                                               ohne Anmeldung, neue Termine ohne neue Client-Version)
 """
@@ -930,11 +929,6 @@ def make_handler(state):
                     self.error(404, "no client build available yet")
                 else:
                     self.send_json(200, info)
-                return True
-            if path == "/v1/time":
-                if not self.guard("time", 60):
-                    return True
-                self.send_json(200, {"now": int(time.time())})
                 return True
             if path == "/v1/events":
                 if not self.guard("events", 60):

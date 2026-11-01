@@ -456,6 +456,15 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.77.0: Skys im normalen Goon Shop
+
+- **Geändert:** Skys kommen jetzt in die normale stündliche Rotation des Goon Shops, wie alle anderen Items. Es gelten dieselben Seltenheits-Chancen und dieselben 8 Plätze.
+- **Entfernt:** Den Tab "Hourly Shop", sein eigenes Angebot aus 6 Skys und den Zeitabgleich `GET /v1/time` gibt es nicht mehr. Der Goon Shop nutzt wie bisher die Uhr des PCs.
+- **Rotation:** Weil 18 neue Items im Pool liegen, ändert sich die Auswahl der Rotation gegenüber älteren Versionen. Der Preis der Skys und ihr Inhalt bleiben gleich.
+- **Besitz:** Bereits gekaufte Skys bleiben erhalten. Skys lassen sich jetzt wie andere Items aus dem Shop auch verschenken.
+
+Die Abschnitte zu 3.75.0 und 3.76.0 unten beschreiben den damaligen Stand, dort stehen der Hourly Shop und `/v1/time` noch.
+
 ## Update 3.76.0: Codes mit Event-Coins
 
 - **Neu:** Einlösbare Codes können jetzt neben Goon Coins auch Event-Coins geben, zum Beispiel Halloween Coins. Mit `add_code.py` zum Beispiel: `py -3 tools/backend/add_code.py 1000 --event-coins 500 --event-currency halloween`.
