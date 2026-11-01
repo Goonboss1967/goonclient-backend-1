@@ -456,6 +456,62 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.59.0: Auren komplett überarbeitet
+
+Alle sieben Auren sind neu gebaut: weiche, leuchtende Teilchen statt harter Quadrate, erkennbare Formen, Schichten
+(ruhiger Mantel, klare Form, wenige helle Funken) und Bewegung, die auf den Spieler reagiert.
+
+- **Love:** kleine Herzen in zwei Größen steigen in einer langsamen Doppelhelix auf und wiegen seitlich; rosa Glimmer am
+  Körper; ab und zu pulsiert ein großes Herz. Verlauf Pink → Rosé → Weiß.
+- **Frost:** sechsstrahlige Schneekristalle in drei Größen schweben drehend herab, kalter Nebel kreist um die Füße,
+  funkelnde Lichtpunkte; beim Laufen eine kurze Eisspur.
+- **Matrix:** dichte Datenströme aus 0/1-Zeichen in einem Zylinder um den Körper, heller Kopf, verblassender Schweif,
+  verschiedene Geschwindigkeiten, ab und zu ein Glitch mit versetzten Zeichen.
+- **Flame:** echte Flammenzungen: breiter, heller Kern unten, spitz und kühler nach oben (Weiß-Gelb → Orange → Rot →
+  Dunkelrot), unregelmäßiges Flackern, aufsteigende Funken, Glut am Boden, etwas Rauch.
+- **Lightning:** zackige, verzweigte Blitzbögen (Mittelpunkt-Verschiebung) mit hellem Kern, cyanfarbenem Glow, kurzen
+  Entladungen mit Nachleuchten und Funken; Gelb als Akzent.
+- **Golden Rings:** vier dünne Ringe in verschiedenen Höhen kreisen gegenläufig, leicht geneigt und auf und ab wandernd,
+  mit mitlaufendem Glitzer; regelmäßig leuchtet ein Ring auf und schickt eine goldene Welle nach oben.
+- **Void:** dunkler Sog: violette und fast schwarze Teilchen werden spiralförmig zum Körper gezogen, helle Sterne im
+  Inneren, ab und zu ein violett-magentafarbener Riss mit Welle am Boden.
+
+**Reaktion auf den Spieler:** im Stehen ruhig und "atmend", beim Laufen bleibt die Aura als Sog hinter dir, beim Sprinten
+intensiver, beim Springen ein kurzer Impuls nach außen, beim Schleichen gedämpft. Übergänge sind weich geglättet.
+
+**Neue Einstellungen** (Goon Cosmetics → Aura): **Intensity** (Dichte, 25–200 %), **Size** (50–200 %), **Speed**
+(25–200 %), **Custom colors** mit **Color 1** und **Color 2**, **Visible to others** (aus = nur du siehst deine Aura).
+Andere Spieler sehen deine Aura mit deinen Einstellungen. Alte Configs laden ohne Änderung (fehlende Werte = Standard).
+
+**Vorschau:** Shop und Inventar zeigen die Aura animiert an deinem Spieler, mit deinen aktuellen Einstellungen.
+
+**Technik und Grenzen:**
+- Die Berechnung steckt in `cosmetics/aura/AuraEngine` (reines Java, ohne Minecraft, getestet in `tools/AuraEngineTest.java`):
+  jedes Teilchen folgt direkt aus Zeit und Seed, deshalb kein Aufploppen, keine Allokationen pro Bild und bei gleichem Seed
+  exakt dasselbe Bild. Gezeichnet wird in `AuraRenderer` als zur Kamera gedrehte Sprites aus `textures/aura/atlas.png`
+  (Generator: `tools/GenerateAuraAtlas.java`).
+- Höchstens **70 Teilchen** pro Aura und Spieler. Detailstufe nach Entfernung: bis 16 Blöcke voll, bei 32 Blöcken etwa
+  20 %, ab 64 Blöcken nichts.
+- Leuchtende Teilchen werden **additiv** gezeichnet (eigene Render-Pipeline nach dem Vorbild von Minecrafts "eyes"),
+  dunkle Teilchen und Rauch normal überblendet. Lässt sich die Pipeline nicht anlegen, wird automatisch "eyes" benutzt.
+- Die Einstellungen gelten für die gewählte Aura (eine gemeinsame Einstellung für alle Auren, nicht je Aura getrennt).
+- Server: neue Felder `auraStyle`, `auraColor1`, `auraColor2` (dafür `server.py` hochladen).
+
+## Update 3.58.0: Auren
+
+- **Neue Cosmetic-Art: Auren.** Eigene Kategorie "Auras" im Goon Shop und im Inventar. Eine Aura umgibt den **ganzen
+  Körper** vom Kopf bis zu den Füßen (nicht nur den Kopf wie Accessoires) und kippt beim Schleichen nicht mit.
+  - **Love Aura** (Uncommon): rosa Herzen steigen langsam am Körper hoch.
+  - **Frost Aura** (Rare): Schneeflocken steigen auf, an den Füßen dreht sich ein Eisring.
+  - **Matrix Aura** (Rare): grüne Code-Streifen rasen am Körper hoch.
+  - **Flame Aura** (Epic): Flammen lodern aus glühender Glut an den Füßen nach oben.
+  - **Lightning Aura** (Epic): zuckende Blitze kreisen um den ganzen Körper.
+  - **Golden Rings** (Legendary): drei goldene Ringe drehen sich an Füßen, Hüfte und Kopf und wippen leicht.
+  - **Void Aura** (Legendary): violette Teilchen wirbeln in einer Spirale nach oben.
+- Auren lassen sich mit Hut, Flügeln, Accessoire und Haustier kombinieren, gehören zu den Outfits und stehen in den
+  Freundes-Stats. Andere GoonClient-Spieler sehen deine Aura (Ausblenden mit "Show other players' accessories").
+- Server: neues Feld `aura` (dafür `server.py` hochladen). Das Server-Relay nutzt jetzt den Kanal `cosmetics_v5`.
+
 ## Update 3.57.0: Goon Shop und Haustiere
 
 - **Der Hourly Shop heißt jetzt wieder "Goon Shop"** (Tab, Banner, Meldungen, Missionen, Website). Er funktioniert wie

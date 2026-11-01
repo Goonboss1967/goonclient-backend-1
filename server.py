@@ -69,12 +69,16 @@ MAX_CODE_COINS = 100000
 CHALLENGE_TTL = 60
 TOKEN_TTL = 3600
 RECORD_MAX_AGE = 60 * 24 * 3600  # 60 Tage ohne Lebenszeichen: Eintrag wird gelöscht
+AURA_STYLE_DEFAULT = 100 | 100 << 8 | 100 << 16  # Aura: 100 % Dichte, Größe und Tempo, keine eigenen Farben
+PET_STYLE_DEFAULT = 120 | 100 << 8 | 1 << 16  # Haustier: 120 % Größe, 100 % Animation, Effekte an
 ACTIVE_MAX_AGE = 15 * 60  # Clients laden alle 5 Minuten hoch: so lange gilt ein Spieler als aktiver GoonClient-Nutzer
 
 DEFAULTS = {
     "cape": "", "badge": "", "badgeColor": 0xFFFFFF, "badgeText": "", "badgePrefix": False,
     "tag": "", "tagColor1": 0xFFFFFF, "tagColor2": 0xFFFFFF, "tagSpeed": 0, "tagBold": False,
-    "hat": "", "wings": "", "accessory": "", "pet": "",
+    "hat": "", "wings": "", "accessory": "", "pet": "", "aura": "",
+    "auraStyle": AURA_STYLE_DEFAULT, "auraColor1": 0xFFFFFF, "auraColor2": 0xFFFFFF,
+    "petStyle": PET_STYLE_DEFAULT,
 }
 
 
@@ -123,7 +127,33 @@ def clean_cosmetics(raw):
         "wings": as_id(raw.get("wings")),
         "accessory": as_id(raw.get("accessory")),
         "pet": as_id(raw.get("pet")),
+        "aura": as_id(raw.get("aura")),
+        # Aura-Einstellungen (ab Client 3.59.0): Dichte | Größe << 8 | Tempo << 16 | eigene Farben << 24
+        "auraStyle": clean_aura_style(raw.get("auraStyle")),
+        "auraColor1": as_int(raw.get("auraColor1"), 0, 0xFFFFFF, 0xFFFFFF),
+        "auraColor2": as_int(raw.get("auraColor2"), 0, 0xFFFFFF, 0xFFFFFF),
+        # Haustier-Einstellungen (ab Client 3.60.0): Größe | Animation << 8 | Effekte << 16
+        "petStyle": clean_pet_style(raw.get("petStyle")),
     }
+
+
+def clean_pet_style(value):
+    """Wie CosmeticsPayload.packPetStyle: Größe 50-200 %, Animation 0-150 %, Bit 16 = Effekte."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return PET_STYLE_DEFAULT
+    size = max(50, min(200, value & 0xFF))
+    anim = max(0, min(150, (value >> 8) & 0xFF))
+    return size | anim << 8 | ((value >> 16) & 1) << 16
+
+
+def clean_aura_style(value):
+    """Wie CosmeticsPayload.packAuraStyle: Dichte 25-200, Größe 50-200, Tempo 25-200 (Prozent), Bit 24 = eigene Farben."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return AURA_STYLE_DEFAULT
+    intensity = max(25, min(200, value & 0xFF))
+    size = max(50, min(200, (value >> 8) & 0xFF))
+    speed = max(25, min(200, (value >> 16) & 0xFF))
+    return intensity | size << 8 | speed << 16 | ((value >> 24) & 1) << 24
 
 
 ITEM_RE = re.compile(r"^[a-z]+\.[a-z0-9_]{1,24}$")
