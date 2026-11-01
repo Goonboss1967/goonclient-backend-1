@@ -141,12 +141,13 @@ def clean_cosmetics(raw):
 
 
 def clean_pet_style(value):
-    """Wie CosmeticsPayload.packPetStyle: Größe 50-200 %, Animation 0-150 %, Bit 16 = Effekte."""
+    """Wie CosmeticsPayload.packPetStyle: Größe 50-200 %, Animation 0-150 %, Bit 16 = Effekte, Bits 17-18 = Variante 0-2."""
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         return PET_STYLE_DEFAULT
     size = max(50, min(200, value & 0xFF))
     anim = max(0, min(150, (value >> 8) & 0xFF))
-    return size | anim << 8 | ((value >> 16) & 1) << 16
+    variant = min(2, (value >> 17) & 3)
+    return size | anim << 8 | ((value >> 16) & 1) << 16 | variant << 17
 
 
 def clean_aura_style(value):

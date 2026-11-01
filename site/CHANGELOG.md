@@ -456,6 +456,122 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.69.0: Auren springen beim Sprung nicht mehr
+
+- **Fehler:** Beim Absprung sprangen alle Teilchen einer Aura im selben Moment bis zu 4 Pixel nach außen und wurden schlagartig heller. Das sah aus, als würde die Animation neu starten.
+- **Jetzt:** Der Sprung-Impuls schwillt in 0,15 Sekunden weich an und läuft bis 0,6 Sekunden wieder aus. Das gilt für alle Auren. Auch das schnelle Hüpfen löst keinen Sprung im Impuls mehr aus.
+- **Tests:** `tools/AuraEngineTest.java` prüft für jede Aura, dass beim Absprung kein Teilchen von Bild zu Bild springt.
+
+**Hochladen:** den Ordner `tools/backend/site`, danach "Manual Deploy" auf Render. `server.py` hat sich gegenüber 3.68.0 nicht geändert.
+
+## Update 3.68.0: 6 neue Haustiere
+
+| Pet | Id | Seltenheit | Preis | Art | Eigenheit |
+|---|---|---|---|---|---|
+| Wolf Pup | `pet.wolfpup` | Common | 60 | läuft | trabt verspielt, Schwanz wedelt immer, springt höher mit, heult im Stand ab und zu (nur Animation, kein Sound) |
+| Panda | `pet.panda` | Uncommon | 150 | läuft | schaukelnder Gang, setzt sich im Stand und kaut Bambus, rollt sich beim Streicheln zur Seite |
+| Axolotl | `pet.axolotl` | Rare | 280 | schwebt | Welle durch den Körper, sechs Kiemen wippen und legen sich beim Tempo an, im Wasser schneller |
+| Slimey | `pet.slimey` | Rare | 360 | hüpft | durchscheinend mit Kern, Squash und Stretch, Spritzer bei der Landung, wählbar Grün, Blau, Pink |
+| Owl | `pet.owl` | Epic | 780 | fliegt | ruhige Flügelschläge, dreht den Kopf weit, blinzelt langsam, setzt sich auf die Schulter, wenn der Spieler steht |
+| Phoenix Chick | `pet.phoenixchick` | Legendary | 1800 | hüpft | flattert beim Hüpfen, Glut-Funken, leuchtet immer und beim Streicheln stärker |
+
+- **Kaufen:** wie alle Items über die stündliche Rotation des Goon Shops. Alte Wallets laden weiter.
+- **Einstellungen:** `Size`, `Animation`, `Effects`, `Visible to others`, `Pet key` und neu `Slimey color`. Du findest sie im Inventar unter `Pets` und in `Goon Cosmetics > Settings > Pet`,
+  dort auch die Pet-Auswahl mit `Locked`. Sie gelten für das ausgerüstete Pet, nicht je Pet. Alte Configs laden weiter (Slimey ist dann grün).
+- **Sync:** Die Pet-Ids laufen über das vorhandene Feld `pet`, alte Clients ignorieren unbekannte Pets. Die Farbe von Slimey steckt in `petStyle` (Bits 17 und 18).
+  Fremder Besitz lässt sich nicht prüfen, wie bei allen Items.
+- **Grenzen:**
+  - Kein Pet-Name als Namensschild (optional im Auftrag, weggelassen: freier Text an andere Spieler bräuchte ein neues Protokollfeld und Moderation).
+  - Die Eule setzt sich nicht auf die Schulter, solange du in der Ego-Ansicht bist, und folgt dabei nicht der Armhaltung.
+  - Die Vorschau im Menü zeigt die Idle-Animation, ohne Maus zum Drehen.
+  - Streicheln sehen nur du selbst, und jeder Client berechnet die Tiere selbst, sie stehen bei zwei Spielern nie exakt gleich.
+  - Der Axolotl schwimmt schneller, wenn der Spieler im Wasser ist, nicht abhängig vom eigenen Standort.
+- **Modelle und Texturen:** `PetModels.java` und `tools/GeneratePets.java` (neue Muster: Federn, Schleim, Flaum, Bambus, Fransen).
+- **Tests:** `tools/PetAnimatorTest.java` prüft alle 14 Pets (Winkel, NaN, Übergänge, Federung, Abstand, Gelände, Schweben), dazu Katalog, Preisbänder, Kauf, Schulter, Sitzen, Schleim-Volumen und Farbe.
+  Backend-Rundlauf in `tools/BackendIntegrationTest.java` und `tools/backend/test_backend.py`.
+
+**Hochladen:** `tools/backend/server.py` im Repo `Goonboss1967/goonclient-backend` ersetzen und den Ordner `tools/backend/site` hochladen, danach "Manual Deploy" auf Render.
+Ohne die neue `server.py` sehen andere Spieler auf Servern ohne GoonClient-Relay dein Slimey immer grün. Die Pets selbst funktionieren auch mit der alten `server.py`.
+
+## Update 3.67.0: BETA-Schild im Menü
+
+- Ganz oben rechts auf dem GoonClient-Menü steht jetzt `BETA`, daneben "Found a bug? Please report it!". Bei sehr schmalem Fenster bleibt nur `BETA`.
+
+**Hochladen:** den Ordner `tools/backend/site`, danach "Manual Deploy" auf Render. `server.py` hat sich nicht geändert.
+
+## Update 3.66.0: Laufende Haustiere schweben nicht mehr
+
+- **Fehler:** Laufende Haustiere konnten in der Luft oder auf Dächern hängen bleiben. Die Bodensuche begann in der Höhe des Tiers und reichte nur 6 Blöcke nach unten; fand sie nichts,
+  blieb das Tier, wo es war. Das passierte zum Beispiel nach Sprungplatten oder Teleports. Jeder Client berechnet das Tier selbst, deshalb sahen es manche Spieler und andere nicht.
+- **Jetzt:** Der Boden wird immer ab der Höhe des Spielers gesucht, bis zu 96 Blöcke tief. Ohne Boden in Reichweite läuft das Tier auf Höhe des Spielers.
+- **Dauer-Teleport behoben:** Unter einem mehr als 10 Blöcke hoch fliegenden Spieler teleportierte das Tier in jedem Bild neu (mit Partikeln). Es teleportiert jetzt nur, wenn es dadurch näher kommt.
+- **Tests:** `tools/PetAnimatorTest.java` prüft Landen nach dem Hochschleudern, Dach und fliegenden Spieler.
+- **Wichtig:** Jeder Spieler berechnet die Tiere der anderen selbst. Damit jemand dein Tier richtig sieht, braucht diese Person selbst 3.66.0.
+
+**Hochladen:** den Ordner `tools/backend/site`, danach "Manual Deploy" auf Render. `server.py` hat sich nicht geändert.
+
+## Update 3.65.0: Haustier-Schatten sichtbar
+
+- Der weiche Schatten laufender Haustiere war seit 3.60.0 zu klein und zu blass und lag fast ganz unter dem Tier. Er ist jetzt größer und kräftiger und wächst mit `Size`.
+- Fliegende Haustiere haben weiterhin keinen Schatten.
+
+**Hochladen:** den Ordner `tools/backend/site`, danach "Manual Deploy" auf Render. `server.py` hat sich nicht geändert.
+
+## Update 3.64.0: Eigene Aura nie in der Ego-Ansicht
+
+- In der Ego-Ansicht siehst du deine eigene Aura jetzt nie, die Auren anderer GoonClient-Spieler aber weiterhin. In der Third Person (F5) siehst du deine Aura wie bisher.
+- Der Schalter `Third person only` aus 3.63.0 ist entfernt, er wird nicht mehr gebraucht. Alte Configs laden weiter, der gespeicherte Wert wird ignoriert.
+
+**Hochladen:** den Ordner `tools/backend/site`, danach "Manual Deploy" auf Render. `server.py` hat sich nicht geändert.
+
+## Update 3.63.0: 16 neue Auren
+
+| Aura | Id | Seltenheit | Preis | Look |
+|---|---|---|---|---|
+| Sakura | `aura.sakura` | Common | 55 | Blütenblätter segeln in S-Kurven herab |
+| Autumn Leaves | `aura.leaves` | Common | 60 | Herbstblätter wirbeln, wehen beim Laufen hinterher |
+| Soap Bubbles | `aura.bubbles` | Uncommon | 110 | Seifenblasen steigen, wackeln und platzen mit Spritzer |
+| Fireflies | `aura.fireflies` | Uncommon | 130 | Glühwürmchen auf Lissajous-Bahnen mit weichem Puls |
+| Stardust | `aura.stardust` | Rare | 240 | Sternenstaub-Band windet sich hoch, Sterne blinken |
+| Rain Cloud | `aura.rain` | Rare | 300 | Wolke über dem Kopf, Tropfen, Spritz-Ringe, leises Leuchten |
+| Sandstorm | `aura.sandstorm` | Rare | 340 | Sandkörner in einem Trichter, Staubringe am Boden |
+| Northern Lights | `aura.aurora` | Rare | 390 | Polarlicht-Vorhänge wehen hinter und neben dir |
+| Petal Storm | `aura.petalstorm` | Epic | 620 | Drei Blüten-Umlaufbahnen, Windstöße beim Sprinten |
+| Crystal Orbit | `aura.crystalorbit` | Epic | 720 | Kristalle in drei Größen kreisen und blitzen auf |
+| Blade Wind | `aura.bladewind` | Epic | 860 | Drei Klingenbögen schneiden in Wellen, mit Funken |
+| Holo Field | `aura.holo` | Epic | 980 | Daten-Ringe, Gitter, Scan-Ring, kurze Glitches |
+| Galaxy | `aura.galaxy` | Legendary | 1700 | Spiralgalaxie hinter dir: Kern, Arme, ferne Sterne |
+| Celestial | `aura.celestial` | Legendary | 1950 | Heiligenschein, Strahlenkranz, schwebende Lichtfedern |
+| Phoenix Fire | `aura.phoenixfire` | Legendary | 2300 | Schlagende Flammenflügel, Federn zerfallen zu Glut, Feuerstoß beim Springen |
+| Eclipse | `aura.eclipse` | Legendary | 2800 | Dunkle Scheibe mit brennender Korona, Strahlen, Funken |
+
+Die sieben alten Auren bleiben unverändert im Katalog: Love (140), Frost (340), Matrix (380), Flame (800), Lightning (900), Golden Rings (1900), Void (2400).
+
+- **Ids:** `crystalorbit` und `phoenixfire` heißen so, weil `crystals` (Accessoire) und `phoenix` (Flügel) schon vergeben sind.
+- **Kaufen:** wie alle Items über die stündliche Rotation des Goon Shops. Starter-Auren gibt es keine.
+- **Einstellungen:** `Intensity`, `Size`, `Speed`, `Custom colors` mit `Color 1` und `Color 2` (bei Crystal Orbit die Kristallfarbe), `Visible to others`
+  und neu `Third person only`. Du findest sie im Inventar unter `Auras` und in `Goon Cosmetics > Settings > Aura`, dort auch die Aura-Auswahl mit `Locked`.
+  Sie gelten für die ausgerüstete Aura, nicht je Aura. Alte Configs laden weiter.
+- **Fehler aus früheren Updates behoben:** Die Einstellungen von Auren und Haustieren (auch `Pet key`) gab es seit 3.59.0 bzw. 3.60.0 zwar, sie standen aber in
+  keinem Menü. Jetzt stehen sie im Inventar. Dazu erkennen Auren die Bewegung anderer Spieler jetzt richtig.
+- **Überblendung:** Hauptformen werden deckend-weich gezeichnet, nur Glanz und Funken additiv. Rein additive Teilchen wären vor hellem Himmel weiß und kaum zu sehen.
+  Alte Auren profitieren davon bei ihren dunklen Teilchen.
+- **Sicht:** Scheiben im Rücken (Galaxy, Eclipse) werden durchsichtig, wenn du von hinten schaust, damit der Spieler sichtbar bleibt.
+- **Leistung:** höchstens 70 Teilchen je Aura und Spieler, keine Objekte pro Bild in der Berechnung, ab 16 Blöcken weniger Teilchen, bei 32 Blöcken noch 20 %, ab 64 keine.
+- **Grenzen:**
+  - Ringe am Boden (Rain Cloud, Sandstorm, Crystal Orbit) liegen auf Fußhöhe und folgen nicht dem Gelände, beim Springen oder an Kanten schweben sie.
+  - Beim Schwimmen, Gleiten oder in Emotes bleibt die Aura aufrecht am Spieler und kippt nicht mit.
+  - Teilchen leuchten immer gleich hell, auch nachts und in Höhlen.
+  - Fremder Besitz lässt sich nicht prüfen, wie bei allen Items.
+- **Texturen:** `java tools/GenerateAuraParticles.java` schreibt `textures/aura/atlas.png` und den Kontaktbogen `build/aura_particles.png`. Es ersetzt `tools/GenerateAuraAtlas.java`.
+  Alle Bilder sind selbst berechnet.
+- **Tests:** `tools/AuraEngineTest.java` prüft zusätzlich: Obergrenze wird nie erreicht (kein Teilchen reißt ab), Silhouette bleibt sichtbar, kein Sprung beim Wechsel von
+  Sprinten und Laufen, mindestens drei Bilder je Aura, Katalog, Preisbänder, Kauf. Backend-Rundlauf in `tools/BackendIntegrationTest.java` und `tools/backend/test_backend.py`.
+
+**Protokoll und Backend:** Keine Änderung nötig. Aura-Ids laufen schon über das Feld `aura`, alte Clients ignorieren unbekannte Ids. `server.py` hat sich gegenüber 3.61.0 nicht geändert.
+
+**Hochladen:** den Ordner `tools/backend/site`, danach "Manual Deploy" auf Render. `tools/backend/server.py` nur, falls die Version aus 3.61.0 noch nicht online ist.
+
 ## Update 3.62.0: Schriften in der stündlichen Rotation
 
 - Der eigene Tab `Fonts` im Goon Shop ist wieder weg. Schriften kommen jetzt wie alle anderen Items zufällig in die 8 Plätze der
