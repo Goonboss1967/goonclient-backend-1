@@ -456,6 +456,22 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.57.0: Goon Shop und Haustiere
+
+- **Der Hourly Shop heißt jetzt wieder "Goon Shop"** (Tab, Banner, Meldungen, Missionen, Website). Er funktioniert wie
+  bisher: jede volle Stunde 8 neue Items.
+- **Neue Cosmetic-Art: Haustiere (Pets).** Eigene Kategorie "Pets" im Goon Shop und im Inventar, ein Haustier gleichzeitig.
+  - **Schulter-Haustiere** sitzen auf deiner linken Schulter und bewegen sich mit dir:
+    **Kitten** (Common), **Frog** (Uncommon), **Penguin** (Uncommon), **Fox** (Rare).
+  - **Fliegende Haustiere** schweben neben deinem Kopf, wippen auf und ab und schlagen mit den Flügeln:
+    **Bee** (Uncommon), **Bat** (Rare, rote Augen), **Little Ghost** (Epic, leuchtet), **Baby Dragon** (Legendary,
+    goldene Hörner, leuchtende Flügelspitzen).
+  - In der Beschreibung steht jeweils "Shoulder pet" oder "Flying pet". Die Vorschau zeigt das Haustier an deinem Spieler.
+  - Andere GoonClient-Spieler sehen dein Haustier (über den GoonClient-Server und Server mit GoonClient). Ausblenden mit
+    "Show other players' accessories". Haustiere gehören auch zu den Outfits und stehen in den Freundes-Stats.
+- Server: neues Feld `pet` (dafür `server.py` hochladen). Das Server-Relay nutzt jetzt den Kanal `cosmetics_v4`; Spieler mit
+  älteren Versionen sehen sich über den GoonClient-Server weiterhin, nur nicht ihre Haustiere.
+
 ## Update 3.56.0: Exklusive Items per Code – Hacker Orbit
 
 - **Neue Seltenheit "Exclusive"** (pink): Items, die es **nur über einen Redeem-Code** gibt. Sie kommen nie in den

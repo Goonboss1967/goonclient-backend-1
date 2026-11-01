@@ -74,7 +74,7 @@ ACTIVE_MAX_AGE = 15 * 60  # Clients laden alle 5 Minuten hoch: so lange gilt ein
 DEFAULTS = {
     "cape": "", "badge": "", "badgeColor": 0xFFFFFF, "badgeText": "", "badgePrefix": False,
     "tag": "", "tagColor1": 0xFFFFFF, "tagColor2": 0xFFFFFF, "tagSpeed": 0, "tagBold": False,
-    "hat": "", "wings": "", "accessory": "",
+    "hat": "", "wings": "", "accessory": "", "pet": "",
 }
 
 
@@ -122,6 +122,7 @@ def clean_cosmetics(raw):
         "hat": as_id(raw.get("hat")),
         "wings": as_id(raw.get("wings")),
         "accessory": as_id(raw.get("accessory")),
+        "pet": as_id(raw.get("pet")),
     }
 
 

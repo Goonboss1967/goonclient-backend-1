@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GoonClient</title>
-<meta name="description" content="GoonClient – der kostenlose Fabric-Client für Minecraft 1.21.11: PvP- und HUD-Module, Pack Mixer, Hourly Shop, Battle Pass, Cosmetics, Emotes und Freunde.">
+<meta name="description" content="GoonClient – der kostenlose Fabric-Client für Minecraft 1.21.11: PvP- und HUD-Module, Pack Mixer, Goon Shop, Battle Pass, Cosmetics, Emotes und Freunde.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23ffffff'/%3E%3Cpath d='M44 22H26v20h14v-8h-7' stroke='black' stroke-width='6' fill='none' stroke-linecap='square'/%3E%3C/svg%3E">
 <style>
   :root {
@@ -345,7 +345,7 @@
         <div class="eyebrow"><b>NEU</b> Battle Pass Season 1: Neon Nights</div>
         <h1>Dein Minecraft.<br><span class="grad">Nur besser.</span></h1>
         <p class="lead">GoonClient ist der kostenlose Fabric-Client für Minecraft&nbsp;1.21.11: über 30 PvP- und HUD-Module, ein Pack Mixer
-          für deine Texture Packs, Goon Coins mit Hourly Shop und Battle Pass, Capes, Hüte und Emotes, die andere Spieler sehen, und Freunde.</p>
+          für deine Texture Packs, Goon Coins mit Goon Shop und Battle Pass, Capes, Hüte und Emotes, die andere Spieler sehen, und Freunde.</p>
         <div class="cta">
           <a class="btn primary big" href="#download">⬇ Download <span id="dl-version"></span></a>
           <a class="btn big" href="#features">Alle Funktionen</a>
@@ -363,7 +363,7 @@
             <div class="it">HUD</div>
             <div class="it">Utility</div>
             <div class="g">CLIENT</div>
-            <div class="it">Hourly Shop</div>
+            <div class="it">Goon Shop</div>
             <div class="it">Battle Pass</div>
             <div class="it">Pack Mixer</div>
           </div>
@@ -500,11 +500,11 @@
         <div class="kicker reveal">Goon Coins</div>
         <h2 class="reveal">Spielen, sammeln, freischalten</h2>
         <p class="sub reveal" style="margin-bottom:0">Für jede Minute aktiver Spielzeit bekommst du Goon Coins (AFK zählt nicht). Damit kaufst du Capes, Badges,
-          animierte Nametags, Hüte, Flügel, Accessoires und Emotes.</p>
+          animierte Nametags, Hüte, Flügel, Accessoires, Haustiere und Emotes.</p>
         <ul class="checks reveal">
           <li><span><b>Battle Pass:</b> 30 Stufen mit Free- und Premium-Track (Premium: 1000 Coins). XP für Spielzeit, tägliche Belohnung und Missionen.
             Season 1 „Neon Nights“ hat 7 limitierte Cosmetics, z.B. das animierte Synthwave-Cape.</span></li>
-          <li><span><b>Hourly Shop:</b> Jede Stunde 8 neue Items, je seltener desto wertvoller (Common bis Legendary).</span></li>
+          <li><span><b>Goon Shop:</b> Jede Stunde 8 neue Items, je seltener desto wertvoller (Common bis Legendary).</span></li>
           <li><span><b>Tägliche Belohnung &amp; Missionen:</b> Login-Streak mit bis zu 600 Coins an Tag 7 und 23 Missionen mit Coin-Belohnung.</span></li>
         </ul>
       </div>
@@ -552,7 +552,7 @@
   <div class="wrap">
     <div class="kicker reveal">Gratis Coins</div>
     <h2 class="reveal">Redeem-Codes</h2>
-    <p class="sub reveal">Im Spiel im <b>Hourly Shop</b> unten bei „Redeem code“ eintippen. Jeder Code gilt einmal pro Minecraft-Account.</p>
+    <p class="sub reveal">Im Spiel im <b>Goon Shop</b> unten bei „Redeem code“ eintippen. Jeder Code gilt einmal pro Minecraft-Account.</p>
     <div class="codes" id="code-list"><div class="skeleton"></div><div class="skeleton"></div></div>
   </div>
 </section>
@@ -661,8 +661,8 @@
     ["hud", "cyan", "HUD & Anzeigen", "FPS, CPS, Keystrokes, Koordinaten, Rüstung, Tränke, Inventar … frei verschiebbar im HUD-Editor.", "#modules"],
     ["pack", "pink", "Pack Mixer", "Teile aus mehreren Texture Packs kombinieren – mit Vorschau, Vanilla-Vergleich und Sounds.", "#packmixer"],
     ["star", "gold", "Battle Pass", "30 Stufen mit Free- und Premium-Track und limitierten Season-Cosmetics. Eigener Tab mit seitlicher Leiste.", "#economy"],
-    ["coin", "gold", "Goon Coins & Hourly Shop", "Coins fürs Spielen, jede Stunde 8 neue Items, Coin Upgrader bis 10 Coins pro Minute.", "#economy"],
-    ["cape", "pink", "Cosmetics", "Capes (auch animiert), Badges, animierte Nametags, 3D-Hüte, Flügel und Accessoires – für alle sichtbar.", "#economy"],
+    ["coin", "gold", "Goon Coins & Goon Shop", "Coins fürs Spielen, jede Stunde 8 neue Items, Coin Upgrader bis 10 Coins pro Minute.", "#economy"],
+    ["cape", "pink", "Cosmetics", "Capes (auch animiert), Badges, animierte Nametags, 3D-Hüte, Flügel, Accessoires und Haustiere (auf der Schulter oder fliegend) – für alle sichtbar.", "#economy"],
     ["emote", "green", "Emotes", "Über 15 Emotes vom Wave bis zum Robot, über das Emote-Rad oder eine Taste – andere sehen sie mit.", "#social"],
     ["friends", "green", "Freunde & Geschenke", "Freundschaftsanfragen, Freundes-Stats und Geschenke (Coins oder Items) an deine Freunde.", "#social"],
     ["map", "cyan", "Waypoints & Gadgets", "Wegpunkte mit Strahl und Pfeil, Taschenrechner und Session-Timer direkt im Spiel.", "#modules"]
@@ -782,12 +782,12 @@
       ["Login-Streak – einen Tag verpasst = zurück auf Tag 1", "Erinnerung beim Betreten einer Welt"]],
     ["target", "green", "Missionen & Daily Missions", "23 Erfolge wie „1 Stunde spielen“ oder „100 Emotes“ und jeden Tag 3 neue Daily Missions – alle mit Coins und Battle-Pass-XP.",
       ["Daily Missions: z.B. 30 Minuten spielen, 3 Emotes, ein Item kaufen", "„Claim all“ holt alle Erfolge auf einmal ab"], ["Daily", "new"]],
-    ["coin", "gold", "Hourly Shop", "Jede Stunde 8 neue Items; Seltenheit bestimmt, wie oft ein Item auftaucht.",
+    ["coin", "gold", "Goon Shop", "Jede Stunde 8 neue Items; Seltenheit bestimmt, wie oft ein Item auftaucht.",
       ["Common, Uncommon, Rare, Epic, Legendary", "Live-Vorschau vor dem Kauf"]],
     ["pumpkin", "", "Event-Shops", "Zeitlich begrenzte Shops mit eigener Währung und limitierten Items, z.B. der Halloween Shop mit Halloween Coins.",
       ["Countdown bis zum Ende", "Neue Events ohne Client-Update"]],
-    ["heart", "pink", "Wunschliste", "Markiere Items, die du noch nicht hast – sobald eins im Hourly Shop auftaucht, bekommst du eine Meldung.", null],
-    ["shirt", "cyan", "Outfits", "Speichere bis zu 8 Kombinationen aus Cape, Hut, Flügeln, Accessoire, Nametag und Badge und wechsle mit einem Klick.", null],
+    ["heart", "pink", "Wunschliste", "Markiere Items, die du noch nicht hast – sobald eins im Goon Shop auftaucht, bekommst du eine Meldung.", null],
+    ["shirt", "cyan", "Outfits", "Speichere bis zu 8 Kombinationen aus Cape, Hut, Flügeln, Accessoire, Haustier, Nametag und Badge und wechsle mit einem Klick.", null],
     ["cape", "pink", "Inventar & Anpassen", "Alles, was dir gehört, nach Kategorie und Seltenheit – mit Ausrüsten, Emote-Rad und Feineinstellungen für Capes, Badges und Nametags.", null]
   ]);
 
@@ -795,10 +795,10 @@
     ["friends", "green", "Freunde", "Spieler über den Namen, aus dem Chat (Rechtsklick) oder in der Nähe hinzufügen. Freunde werden im Spiel, im Chat und in der Tab-Liste hervorgehoben.",
       ["Freundschaftsanfragen annehmen oder ablehnen", "Freunde gehen nicht verloren: der Client stellt sie selbst wieder her"]],
     ["hud", "cyan", "Freundes-Stats", "Sieh dir Coins, Spielzeit, gekaufte Items und das, was deine Freunde gerade tragen, an.", null],
-    ["gift", "pink", "Geschenke", "Schick Freunden 100 bis 5000 Goon Coins oder ein Item aus dem aktuellen Hourly Shop – auch wenn sie gerade offline sind.",
+    ["gift", "pink", "Geschenke", "Schick Freunden 100 bis 5000 Goon Coins oder ein Item aus dem aktuellen Goon Shop – auch wenn sie gerade offline sind.",
       ["Zustellung kann nicht verloren gehen", "Meldung beim Empfang und beim Absender"]],
     ["emote", "green", "Emotes für alle", "Deine Emotes sehen alle GoonClient-Spieler in der Nähe – von Wave, Dab und Dance bis zu Levitate und Robot.", null],
-    ["cape", "", "Cosmetics-Sync", "Capes, Badges, Nametags, Hüte, Flügel und Accessoires werden über den GoonClient-Server geteilt – auf jedem Minecraft-Server.", null],
+    ["cape", "", "Cosmetics-Sync", "Capes, Badges, Nametags, Hüte, Flügel, Accessoires und Haustiere werden über den GoonClient-Server geteilt – auf jedem Minecraft-Server.", null],
     ["star", "gold", "Animierte Namen im Chat", "Dein animiertes Nametag und Badge erscheinen auch im Chat neben deinem Namen.", null]
   ]);
 
