@@ -456,6 +456,16 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.62.0: Schriften in der stündlichen Rotation
+
+- Der eigene Tab `Fonts` im Goon Shop ist wieder weg. Schriften kommen jetzt wie alle anderen Items zufällig in die 8 Plätze der
+  stündlichen Rotation, mit denselben Chancen je Seltenheit. Außerhalb ihrer Stunde sind sie nicht kaufbar. Mit "Show locked" im
+  Inventar lassen sie sich auf die Wunschliste setzen.
+- Im Inventar bleibt die Kategorie `Fonts`, dort rüstest du gekaufte Schriften aus. Default gehört weiter jedem und ist nie im Shop.
+- Weil mehr Items im Pool sind, sehen Clients ab 3.62.0 pro Stunde einen anderen Shop als ältere Versionen.
+
+**Hochladen:** den Ordner `tools/backend/site`, danach "Manual Deploy" auf Render. `server.py` hat sich gegenüber 3.61.0 nicht geändert.
+
 ## Update 3.61.0: Schriften im Goon Shop
 
 Neue Shop-Kategorie **Fonts**: Du kaufst eine Schrift mit Goon Coins und rüstest sie im Inventar aus. Sie gilt für deinen Namen über dem
