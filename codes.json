@@ -53,6 +53,14 @@
       "coins": 3000,
       "public": true,
       "code": "GOON-KJ93-S2WC"
+    },
+    {
+      "id": "party1000h",
+      "hash": "a2c6ccd05398f04d927cf6e4076ca0575be508ff25c489a567ce27432b0713ed",
+      "coins": 1000,
+      "eventCoins": 500,
+      "eventCurrency": "halloween",
+      "expires": "2026-11-06"
     }
   ]
 }

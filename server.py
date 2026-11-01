@@ -44,6 +44,7 @@ Schnittstelle (alles JSON):
   POST /v1/gifts/send   {"id", "to", "coins", "item"} -> {"status": "pending" | "claimed"} (wiederholbar mit derselben Id)
   GET  /v1/gifts                           -> {"incoming": [{"id","from","fromName","coins","item"}], "sent": {"<id>": claimed}}
   POST /v1/gifts/claim  {"id"}             -> {"ok": true}, 404 ohne solches Geschenk
+  GET  /v1/time                            -> {"now": <Sekunden UTC>} (Zeitabgleich für den Hourly Shop)
   GET  /v1/events                          -> {"events": [...]} aus events.json (Event-Shops: Termine, Währung, Items;
                                               ohne Anmeldung, neue Termine ohne neue Client-Version)
 """
@@ -378,6 +379,7 @@ CODE_SALT = "goonclient-code-v1|"
 CODE_ID_RE = re.compile(r"^[a-z0-9_]{1,32}$")
 ITEM_ID_RE = re.compile(r"^[a-z]{1,16}\.[a-z0-9_]{1,32}$")  # Shop-Id, z.B. accessory.hackerorbit
 CODE_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
+EVENT_CURRENCY_RE = re.compile(r"^[a-z0-9_]{1,24}$")
 
 
 def normalize_code(text):
@@ -397,6 +399,7 @@ class Codes:
     (maxUses = höchstens so viele Spieler insgesamt, expires = letzter gültiger Tag; beide optional).
     Mit "item": "accessory.hackerorbit" gibt der Code zusätzlich ein exklusives Item (dann darf "coins" 0 sein).
     Clients vor 3.56.0 kennen keine Items: für sie gilt ein Item-Code nicht (426), damit niemand den Code ohne Item verbraucht.
+    Mit "eventCoins": 500, "eventCurrency": "halloween" gibt der Code zusätzlich Event-Coins. Das können erst Clients ab 3.76.0, ältere bekommen ebenfalls 426.
     """
 
     def __init__(self, path):
@@ -428,15 +431,20 @@ class Codes:
             if not (isinstance(item, str) and (item == "" or ITEM_ID_RE.match(item))):
                 print("codes.json: invalid item, entry skipped: %r" % (c,))
                 continue
+            event_coins, event_currency = c.get("eventCoins", 0), c.get("eventCurrency", "")
+            if not (isinstance(event_coins, int) and not isinstance(event_coins, bool) and 0 <= event_coins <= MAX_CODE_COINS
+                    and isinstance(event_currency, str) and (event_coins == 0 or EVENT_CURRENCY_RE.match(event_currency))):
+                print("codes.json: invalid event coins, entry skipped: %r" % (c,))
+                continue
             if not (isinstance(cid, str) and CODE_ID_RE.match(cid) and isinstance(h, str) and CODE_HASH_RE.match(h)
                     and isinstance(coins, int) and not isinstance(coins, bool) and 0 <= coins <= MAX_CODE_COINS
-                    and (coins > 0 or item)):
+                    and (coins > 0 or item or event_coins > 0)):
                 print("codes.json: invalid entry skipped: %r" % (c,))
                 continue
             max_uses = c.get("maxUses")
             public_code = c.get("code") if c.get("public") is True and isinstance(c.get("code"), str) \
                 and hash_code(normalize_code(c.get("code"))) == h else None  # nur zeigen, wenn Klartext und Hash passen
-            table[h] = {"id": cid, "coins": coins, "item": item,
+            table[h] = {"id": cid, "coins": coins, "item": item, "eventCoins": event_coins, "eventCurrency": event_currency,
                         "maxUses": max_uses if isinstance(max_uses, int) and max_uses > 0 else None,
                         "expires": c.get("expires") if isinstance(c.get("expires"), str) else None,
                         "public": public_code}
@@ -723,7 +731,10 @@ EMOTE_IDS = {"wave", "dance", "flex", "dab", "salute", "spin", "orangejustice", 
              # 3.45.0 (Halloween, limitiert)
              "zombie", "boo",
              # 3.49.0 (Season-Pass, limitiert)
-             "robot"}
+             "robot",
+             # 3.70.0
+             "heartbeat", "hero", "sleep", "meditate", "rage", "tinyhead", "confetti", "bounce", "balloon",
+             "ghostly", "bighead", "flip", "fire", "mindblown"}
 EMOTE_TTL = 8.0  # so lange bleibt ein Emote abrufbar (Sekunden)
 
 
@@ -920,6 +931,11 @@ def make_handler(state):
                 else:
                     self.send_json(200, info)
                 return True
+            if path == "/v1/time":
+                if not self.guard("time", 60):
+                    return True
+                self.send_json(200, {"now": int(time.time())})
+                return True
             if path == "/v1/events":
                 if not self.guard("events", 60):
                     return True
@@ -1089,6 +1105,8 @@ def make_handler(state):
                         return self.error(410, "code expired")
                     if entry["item"] and body.get("items") is not True:
                         return self.error(426, "update GoonClient to redeem this code")
+                    if entry["eventCoins"] and body.get("eventCoins") is not True:
+                        return self.error(426, "update GoonClient to redeem this code")
                     if entry["maxUses"] is not None and state.store.claim_count(entry["id"]) >= entry["maxUses"]:
                         return self.error(410, "code used up")
                     if not state.store.claim(uid, entry["id"]):
@@ -1096,6 +1114,9 @@ def make_handler(state):
                     reply = {"ok": True, "id": entry["id"], "coins": entry["coins"]}
                     if entry["item"]:
                         reply["item"] = entry["item"]
+                    if entry["eventCoins"]:
+                        reply["eventCoins"] = entry["eventCoins"]
+                        reply["eventCurrency"] = entry["eventCurrency"]
                     return self.send_json(200, reply)
                 if is_redeem:
                     uid = state.uuid_for(self.bearer())

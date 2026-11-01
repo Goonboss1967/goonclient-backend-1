@@ -456,6 +456,291 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.76.0: Codes mit Event-Coins
+
+- **Neu:** Einlösbare Codes können jetzt neben Goon Coins auch Event-Coins geben, zum Beispiel Halloween Coins. Mit `add_code.py` zum Beispiel: `py -3 tools/backend/add_code.py 1000 --event-coins 500 --event-currency halloween`.
+- **Ältere Clients:** Sie bekommen bei so einem Code die Meldung, dass sie GoonClient aktualisieren sollen. Der Code bleibt dabei unverbraucht.
+- **Backend:** `tools/backend/server.py` und `tools/backend/codes.json` müssen in `Goonboss1967/goonclient-backend` ersetzt werden. Der Client braucht mindestens Version 3.76.0.
+
+## Update 3.75.0: Skys und der Hourly Shop
+
+**Wichtig für das Backend:** `tools/backend/server.py` hat den neuen Endpunkt `GET /v1/time` und muss in `Goonboss1967/goonclient-backend` ersetzt werden (danach Manual Deploy auf Render). Ohne die neue Datei fehlt nur der Zeitabgleich des Hourly Shops: Der Client nutzt dann die Uhr des PCs, sonst funktioniert alles.
+
+### Skys
+
+Ein Sky ersetzt den Himmel der Overworld auf deinem eigenen Bildschirm. Alle Himmel laufen über einen einzigen prozeduralen Shader (`shaders/core/sky.fsh`), gesteuert über Daten in `cosmetics/sky/SkyCatalog.java`. Es gibt deshalb keine Bilddateien und kein Skript zum Erzeugen von Texturen, und die Vorschau zeigt genau das, was du im Spiel siehst.
+
+| Sky | Id | Seltenheit | Preis | Besonderheit |
+|---|---|---|---|---|
+| Vanilla | `sky.vanilla` | Starter | frei | Normaler Himmel von Minecraft, gehört jedem |
+| Clear Day | `sky.clearday` | Common | 40 | Klares Hellblau |
+| Soft Dusk | `sky.softdusk` | Common | 55 | Pastellviolett |
+| Night Blue | `sky.nightblue` | Common | 70 | Tiefes Marineblau, auch am Tag ruhig |
+| Minimal Gray | `sky.minimalgray` | Common | 90 | Neutrales Grau |
+| Morning Mist | `sky.morningmist` | Uncommon | 120 | Goldener Dunst am Horizont |
+| Cotton Clouds | `sky.cottonclouds` | Uncommon | 150 | Weiche, ziehende Wolken |
+| Teal Haze | `sky.tealhaze` | Uncommon | 190 | Türkis mit dünnen Schleiern |
+| Starlit Plains | `sky.starlit` | Uncommon | 240 | Sternennacht mit schwachem Sternenband |
+| Sunset Blaze | `sky.sunsetblaze` | Rare | 340 | Glühende Wolken und Sonnenstrahlen |
+| Moonlit Lake | `sky.moonlitlake` | Rare | 420 | Großer Mond mit Kratern und Lichthof |
+| Pink Dawn | `sky.pinkdawn` | Rare | 480 | Rosa Schichten, funkelnde Sterne |
+| Emerald Bands | `sky.emeraldbands` | Rare | 580 | Grüne Wolkenbänder |
+| Nebula | `sky.nebula` | Epic | 900 | Bunte Gaswolken, Sternschnuppen, Parallaxe |
+| Aurora Night | `sky.auroranight` | Epic | 1150 | Fließendes Polarlicht |
+| Ringed Planet | `sky.ringedplanet` | Epic | 1400 | Großer Planet mit Ring |
+| Galaxy Core | `sky.galaxycore` | Legendary | 2400 | Spiralgalaxie, drei Monde, Sternschnuppen, Aurora |
+| Eclipse | `sky.eclipse` | Legendary | 3000 | Sonnenfinsternis mit Korona und Strahlen |
+| Celestial Gate | `sky.celestialgate` | Legendary | 3800 | Leuchtendes, drehendes Tor, Nebel, Aurora |
+
+### Hourly Shop
+
+- **Wo:** Im Goon Shop gibt es jetzt die Tabs "Items" (wie bisher, ohne Skys) und "Hourly Shop".
+- **Angebot:** Jede volle Stunde (UTC) kommen 6 Skys ins Angebot, festgelegt allein durch die Stundennummer. Alle sehen zur selben Zeit dasselbe. Mindestens ein Common oder Uncommon ist immer dabei.
+- **Chancen pro Platz:** Common 42,3 %, Uncommon 33 %, Rare 18 %, Epic 6 %, Legendary 0,7 %. Das ergibt im Mittel etwa ein Legendary pro Tag (im Test: 1,02).
+- **Anzeige:** Countdown mit Fortschrittsbalken, Live-Vorschau auf den Karten. Neue Skys tragen in den ersten zwei Minuten der Stunde "NEW", gekaufte sind als "Owned" markiert.
+- **Kauf:** Das Angebot wird beim Kauf selbst noch einmal geprüft. Wechselt die Stunde während der Bestätigung, wird der Kauf ohne Abzug abgelehnt. Gekaufte Skys gehören dir dauerhaft. Alte `wallet.json`-Dateien laden unverändert.
+- **Zeit:** Der Client gleicht sich über `GET /v1/time` mit dem Server ab. **Das ist nicht fälschungssicher:** Das Backend kennt keine Käufe, und wer den Client verändert, kann das umgehen. Ohne Backend zählt die Uhr des PCs, dann lässt sich das Angebot auch durch Verstellen der Uhr ändern.
+
+### Bedienung und Einstellungen
+
+- **Inventar:** Tab "Skys" zum Ausrüsten und Ablegen, mit Live-Vorschau, Zeitregler und Knopf "Test in game". Der Knopf zeigt einen Sky 10 Sekunden lang, ohne ihn auszurüsten, wenn du in einer Welt bist. Der Knopf funktioniert auch im Shop, also vor dem Kauf.
+- **Goon Cosmetics, Settings:** Auswahl mit "Locked"-Markierung und diese Einstellungen:
+
+| Einstellung | Standard | Wirkung |
+|---|---|---|
+| Sky on | an | Aus: normaler Himmel, ohne den Sky abzulegen |
+| Quality | High | Low, Medium oder High: weniger Rausch-Lagen, Polarlicht-Schichten und Sterne |
+| Sky brightness | 100 % | 40 bis 120 %, nur die Optik des Himmels |
+| Stars | an | Sterne des Skys |
+| Clouds | an | Wolken des Skys |
+| Sky in rain | an | Aus: Bei Regen blendet der normale Himmel ein |
+| Minecraft clouds | aus | Zeigt zusätzlich die normalen Wolken |
+
+Darunter steht die Diagnose "Sky render active".
+
+### Verhalten
+
+- **Tageszeit:** Der Sky folgt dem Sonnenstand von Minecraft mit weichen Übergängen zwischen Morgen, Tag, Abend und Nacht.
+- **Wetter:** Regen und Gewitter machen ihn grauer und dunkler, Sterne und Effekte verschwinden.
+- **Andere Orte:** Nether, End und Sicht unter Wasser bleiben unverändert. In Höhlen, unter dem Horizont der Welt, bleibt der normale Nebel.
+- **Nebel:** Über Tage bekommt der Nebel die Horizontfarbe des Skys, damit es keinen Bruch zum fernen Gelände gibt. Nur die Farbe ändert sich, nicht die Sichtweite.
+
+### Fairness
+
+Skys sind rein kosmetisch und werden nicht an andere Spieler gesendet. Sie ändern weder die Helligkeit der Welt noch Licht, Sichtweite, Reichweite, Mobs oder Wetter. Das ist kein Fullbright und kein Vorteil. Die Regeln einzelner Server können sich trotzdem unterscheiden.
+
+### Grenzen
+
+- **Mondphasen:** Skys zeigen immer den vollen Mond.
+- **Normale Wolken:** Standardmäßig sind sie bei aktivem Sky ausgeblendet, weil weiße Wolken vor einem Weltraum-Himmel unpassend wirken. "Minecraft clouds" bringt sie zurück.
+- **Parallaxe:** Sie ist ein leichtes Mitdrehen der Schichten mit der Kamera, keine echte Tiefe.
+- **Optionale Aktionspreise:** Der Hourly Shop zeigt nur Skys, keine Items aus anderen Kategorien.
+- **Getestet und nicht getestet:** Im Spiel geprüft sind alle 18 Skys auf Kontaktbögen zu vier Tageszeiten, zehn davon auch in der Welt, außerdem Kaufregeln, Regen, Wasser, Nether und Menüs. **Nicht** geprüft sind schwache Grafikkarten, AMD- und Intel-Treiber, Shader-Mods wie Iris, hohe Auflösungen und ein echter Server. Die Bildrate lag im Test mit und ohne Sky bei etwa 118, aber in einem kleinen Fenster und nahe an einer Begrenzung. Das sagt also wenig über die Last aus. Bei Problemen hilft Quality "Low" oder "Sky on" aus.
+
+### Technik
+
+- **Eingriffe:** `SkyRendererMixin` (`renderSkyDisc`, `renderSunriseAndSunset`, `renderSunMoonAndStars`, `renderDarkDisc`), `FogRendererMixin` (`computeFogColor`), `LevelRendererMixin` (`addCloudsPass`), alle mit `require = 0`. Scheitert der Shader, bleibt der normale Himmel.
+- **Reine Logik:** `SkyDef`, `SkyCatalog`, `SkyMath` und `shop/SkyShop`, getestet von `tools/SkyLogicTest.java`.
+- **Neuer Sky:** Ein Eintrag in `SkyCatalog` genügt.
+
+## Update 3.74.0: Pop Chams ohne "Through walls"
+
+- **Entfernt:** Die Option "Through walls" gibt es nicht mehr. Der eigene Zeichenweg ohne Tiefentest ist aus dem Code raus. War die Option bei dir an, gilt sie nicht mehr.
+- **Wireframe und Shell:** Blöcke verdecken das Gitter und die Hülle immer ganz normal, auch nur teilweise.
+- **Outline:** Der Umriss nutzt das Glow-System von Minecraft, und das kennt keine Wände. Er erscheint deshalb nur, wenn die Sichtlinie zu Füßen, Körpermitte oder Kopf frei ist. Hinter einer Wand leuchtet er auch beim Pop nicht mehr kurz auf. **Grenze:** Ragt jemand halb hinter einer Kante hervor, ist der ganze Umriss zu sehen, also auch der Teil hinter der Kante. Geht jemand hinter eine Wand, blendet der Umriss noch bis zu etwa 0,2 Sekunden aus. Wer das vermeiden will, bleibt beim Standard Wireframe.
+- **Pop counter:** Die Chat-Zeile erscheint weiterhin für jeden Pop innerhalb der Reichweite, auch hinter Wänden. Sie zeigt nur, was Minecraft dem Client ohnehin meldet. Abschaltbar mit "Pop counter".
+
+Die älteren Abschnitte unten beschreiben den damaligen Stand, dort steht "Through walls" noch.
+
+## Update 3.73.0: Pop Chams im Wireframe-Look
+
+Neuer Darstellungsmodus **Wireframe**, jetzt der Standard: Beim Totem-Pop bleibt ein leuchtendes Drahtgitter in der Pose des Spielers genau an dieser Stelle stehen, während der echte Spieler sich wegbewegen kann. Jeder der sechs Körperteile ist ein eigener Quader, von dem nur die 12 Kanten zu sehen sind. Outline und Shell gibt es weiterhin.
+
+### Ablauf
+
+Die Linien blitzen kurz heller und dicker auf, bleiben kurz stabil und blenden dann weich aus. Dabei steigt das Gitter um etwa 6 Zentimeter und wächst um 3 Prozent. Ein zweiter Pop desselben Spielers erzeugt ein zweites Gitter. Beim Tod, beim Respawn und beim Weltwechsel oder Disconnect verschwinden die Gitter sofort.
+
+### Neue und geänderte Einstellungen
+
+| Einstellung | Standard | Wirkung |
+|---|---|---|
+| Display | Wireframe | Wireframe, Outline oder Shell |
+| Color 1 (top), Color 2 (bottom) | #3FD0FF, #0A8FE0 | Verlauf von oben nach unten |
+| Line width | 2,5 | Liniendicke in Bildschirmpixeln, 1 bis 6, in jeder Entfernung gleich |
+| Effect opacity | 85 % | Deckkraft |
+| Effect duration | 2,0 s | Dauer, 0,5 bis 5 s |
+| Inflate | 8 % | So viel größer als der Körper ist jeder Quader, 0 bis 20 % |
+| Corner points | an | Feine, etwas hellere Punkte auf den Ecken |
+| Rise | an | Gitter steigt beim Ausblenden etwas auf |
+| Pulse | an | Gitter wächst langsam ein wenig |
+| Flash | an | Aufblitzen am Anfang |
+| Max ghosts | 6 | Gleichzeitige Gitter, 1 bis 16. Das älteste verschwindet zuerst |
+| Particle burst | **aus** | Eigener Partikelburst, jetzt standardmäßig aus. Die Totem-Partikel von Minecraft bleiben |
+
+Regenbogen, Farbe nach Beziehung, "Through walls", "Show own pops", "Show others' pops" und "Range" gelten auch für das Wireframe. In der Diagnose steht zusätzlich "Wireframe render active: yes/no, snapshots: N".
+
+**Beim Update:** Damit der neue Look sofort stimmt, haben Display, die beiden Farben, Dauer, Deckkraft und der Partikelburst neue Namen und neue Standardwerte. Wer diese Pop-Chams-Werte in 3.72.0 geändert hatte, muss sie neu einstellen.
+
+### Fairness
+
+Das Modul ist rein visuell, zeigt nur Informationen, die der Client ohnehin erhält, und sendet nichts an den Server. **Manche Server verbieten Anzeigen durch Wände.** Deshalb ist "Through walls" standardmäßig aus, und das Gitter wird dann normal von Blöcken verdeckt.
+
+### Grenzen
+
+- **Nur Spieler:** Andere Lebewesen bekommen kein Gitter.
+- **Keine Biegung:** Gebeugte Ellbogen und Knie aus Emotes zeigt das Gitter gerade, weil jeder Körperteil genau ein Quader ist.
+- **Ohne Hut und Überzug:** Das Gitter folgt dem Grundmodell. Überzüge wie Hut oder Ärmel haben keine eigenen Linien.
+- **Bildwinkel:** Die Liniendicke rechnet mit dem eingestellten FOV. Während eines FOV-Effekts wie beim Sprinten weicht sie minimal ab.
+- **Shader-Mods:** Das Zusammenspiel mit Iris oder ähnlichen Mods ist nicht getestet.
+
+### Technik
+
+- **Daten:** `popchams/WireGhost` und `WireGhosts` kommen ohne Minecraft-Klassen aus und werden von `tools/WireframeLogicTest.java` getestet. Die 48 Eckpunkte werden beim Pop einmal berechnet und sind danach feste Zahlen.
+- **Schnappschuss:** `WireframeRenderer.snapshot` holt beim Pop einen eigenen Render-Zustand des Spielers und baut die Matrix wie `LivingEntityRenderer.submit`. Die dafür nötigen geschützten Methoden erreicht er über `LivingEntityRendererInvoker`.
+- **Linien:** Minecrafts Linien-Renderer wird nicht verwendet. Jede Kante ist ein schmales, zur Kamera zeigendes Band mit weichem Rand und schwachem Schein. Das gibt freie Dicke, Verlauf und glatte Kanten ohne Treppen.
+- **Tiefe:** Normaler Tiefentest mit kleiner Tiefenverschiebung, bei "Through walls" ohne Tiefentest.
+
+## Update 3.72.0: Neues Modul Pop Chams
+
+Verbraucht ein Spieler ein Totem, leuchtet kurz eine Umrandung oder Hülle um seinen Körper auf: erst ein kurzes Aufleuchten, dann stabil, dann weiches Ausblenden. Das Modul liegt in der Kategorie Render und ist standardmäßig aus. Dazu gibt es das neue HUD-Modul **Pop Counter** ("Pops: N"), das deine eigenen Pops seit deinem letzten Tod zählt. Es braucht Pop Chams.
+
+### Darstellungsarten
+
+- **Outline (Standard):** Nutzt das Glow-System von Minecraft. Jeder Umriss blendet einzeln aus, ohne dabei schwarz zu werden.
+- **Shell:** Eine leicht vergrößerte, leuchtende Hülle um das aktuell posierte Spielermodell. Kanten und flach zur Kamera stehende Seiten sind heller als die Fläche. Am Anfang dehnt sie sich kurz aus. Vor hellem Himmel bleibt die Farbe erhalten, deshalb ist die Überblendung nicht rein additiv.
+
+### Einstellungen
+
+| Einstellung | Standard | Wirkung |
+|---|---|---|
+| Mode | Outline | Outline oder Shell |
+| Duration | 1,5 s | Dauer des Effekts, 0,5 bis 5 s |
+| Strength | 100 % | Helligkeit, 25 bis 200 % |
+| Thickness | 0,75 | Abstand der Hülle zum Körper in Modellpixeln, nur bei Shell |
+| Opacity | 100 % | Deckkraft, 10 bis 100 % |
+| Pulse | an | Hülle dehnt sich kurz aus, nur bei Shell |
+| Color 1, Color 2, Use color 2 | Gelb, Grün, an | Verlauf: beim Umriss über die Zeit, bei der Hülle von oben nach unten |
+| Rainbow | aus | Läuft durch alle Farben |
+| Color by relation | aus | Eigene Farben für dich, Freunde, andere Spieler und Gegner |
+| Show own pops, Show others' pops | an | Wessen Pops zu sehen sind. Eigene siehst du nur in der Außenansicht |
+| Through walls | **aus** | Effekt auch hinter Wänden |
+| Range | 64 | Reichweite in Blöcken, 8 bis 256 |
+| Pop counter | an | "Player popped 2 totems" im Chat. Schreibt Totem Tweaks das schon, kommt es nicht doppelt |
+| Particles | an | Kleiner Partikelburst in der Effektfarbe |
+| Sound | aus | Kurzer, leiser Klang zusätzlich zum Totem-Sound |
+| Test effect | | Spielt den Effekt an dir selbst ab, zu sehen mit F5 |
+
+Darunter zeigt eine Diagnose, wie viele Pops erkannt wurden und ob die Render-Hooks greifen. Als **Gegner** gilt, wer in einem anderen Scoreboard-Team ist als du. Freunde kommen aus der GoonClient-Friendlist.
+
+### Fairness
+
+Das Modul ist rein visuell und zeigt nur Informationen, die der Client ohnehin erhält. Es verändert keine Spielmechanik und sendet nichts an den Server. **Manche Server verbieten Client-Mods mit Wallhack-Wirkung.** Deshalb ist "Through walls" standardmäßig aus. Prüfe die Regeln des Servers, bevor du es einschaltest. Unsichtbare Spieler bekommen keinen Effekt.
+
+### Grenzen
+
+- **Nur Spieler:** Andere Lebewesen, die ein Totem benutzen, bekommen keinen Effekt.
+- **Umriss und Wände:** Das Glow-System kennt keine Wände. Ist "Through walls" aus, prüft das Modul deshalb 20-mal pro Sekunde die Sichtlinie zu Füßen, Körpermitte und Kopf. Ist ein Punkt sichtbar, erscheint der ganze Umriss, also auch der Teil hinter einer Kante. Die Hülle hat dieses Problem nicht.
+- **Umrissbreite:** Die Breite gibt Minecraft fest vor. "Thickness" gilt nur für die Hülle.
+- **Andere Glow-Effekte:** Solange ein Pop-Umriss läuft, wirkt auch jeder andere Glow (zum Beispiel Spektralpfeile) über dieselbe Überblendung etwas anders. Schwarze Team-Umrisse sind in dieser Zeit nicht zu sehen.
+- **Shader-Mods:** Ob Umriss und Hülle mit Iris oder ähnlichen Mods laufen, ist nicht getestet.
+- **Höchstens 16 Effekte gleichzeitig.** Ein neuer Pop verdrängt dann den ältesten. Beim Tod, beim Verschwinden eines Spielers, beim Weltwechsel und beim Disconnect werden Effekte sofort entfernt.
+
+### Technik
+
+- **Logik:** `popchams/PopTracker` kommt ohne Minecraft-Klassen aus und wird von `tools/PopChamsLogicTest.java` getestet.
+- **Erkennung:** Entity-Event 35 in `ClientPacketListener.handleEntityEvent`.
+- **Umriss:** `state.outlineColor` im `extractRenderState` und eine eigene Überblendung (`shaders/core/pop_outline_blit.fsh`) in `LevelRenderer.doEntityOutline`. Fehlt dieser Eingriff, bleibt der Umriss sichtbar, wird beim Ausblenden aber dunkel.
+- **Hülle:** `PopChamsRenderer` zeichnet sie über einen eigenen Render-Typ aus `AccessoryLayer`.
+- **Neu im Menü:** Der Einstellungstyp `InfoSetting` zeigt die Diagnose.
+
+## Update 3.71.0: Fenster "What's new" nach jedem Update
+
+- **Fenster:** Beim ersten Start nach einem Update öffnet sich im Hauptmenü einmalig ein Fenster, das zeigt, was neu ist. Mit "Got it", Enter oder Esc schließt du es, das Mausrad scrollt.
+- **Übersprungene Versionen:** Wer mehrere Updates ausgelassen hat, sieht bis zu 5 Versionen auf einmal, die neueste zuerst.
+- **Wieder öffnen:** Ein Klick auf die Versionsnummer oben links im GoonClient-Menü zeigt alle Texte.
+- **Wer es nicht sieht:** Bei einer Neuinstallation erscheint kein Fenster. Es gilt erst ab dem nächsten Update.
+- **Umstieg auf 3.71.0:** Ältere Versionen haben nicht gespeichert, was du zuletzt gesehen hast. Bestehende Spieler sehen deshalb einmal nur den Text von 3.71.0.
+- **Für jedes neue Update:** Trage den Text in `src/client/resources/assets/goonclient/whatsnew.json` ein (`version`, `title` und mindestens eine der Listen `new`, `improved`, `fixed`). Fehlt der Eintrag für die Version aus `gradle.properties`, bricht der Build mit einer Fehlermeldung ab.
+- **Tests:** `tools/WhatsNewTest.java` prüft die Auswahl der Versionen und die Datei selbst.
+
+## Update 3.70.0: Hochwertige Emotes, 14 neue und alle überarbeitet
+
+**Wichtig für das Backend:** `tools/backend/server.py` hat die neuen Emote-Ids bekommen und muss in `Goonboss1967/goonclient-backend` ersetzt werden (danach Manual Deploy auf Render). Ohne die neue Datei lehnt der Server die 14 neuen Emotes ab: Du siehst sie weiter bei dir selbst, aber andere Spieler sehen sie nicht. Die 18 alten Emotes funktionieren auch mit dem alten Server.
+
+### Alle Emotes
+
+Die Ids der alten Emotes sind gleich geblieben. Besitz und Radbelegung bleiben also erhalten. Alle 18 alten Emotes sind neu animiert: mit Ausholen, Überschwingen, Ausklingen und Bewegung im ganzen Körper.
+
+| Emote | Id | Seltenheit | Preis | Neu |
+|---|---|---|---|---|
+| Wave | `wave` | Common | 25 | |
+| Thumbs Up | `thumbsup` | Common | 35 | |
+| Salute | `salute` | Common | 40 | |
+| Point | `point` | Common | 45 | |
+| Heartbeat | `heartbeat` | Common | 50 | ja |
+| Shrug | `shrug` | Common | 55 | |
+| Hero Pose | `hero` | Common | 60 | ja |
+| Clap | `clap` | Uncommon | 100 | |
+| Sleep | `sleep` | Uncommon | 110 | ja |
+| Think | `think` | Uncommon | 120 | |
+| Meditate | `meditate` | Uncommon | 130 | ja |
+| Facepalm | `facepalm` | Uncommon | 140 | |
+| Rage | `rage` | Uncommon | 150 | ja |
+| Bow | `bow` | Rare | 240 | |
+| Tiny Head | `tinyhead` | Rare | 240 | ja |
+| Flex | `flex` | Rare | 280 | |
+| Confetti | `confetti` | Rare | 280 | ja |
+| Dab | `dab` | Rare | 300 | |
+| Cheer | `cheer` | Rare | 320 | |
+| Bounce | `bounce` | Rare | 340 | ja |
+| Balloon | `balloon` | Rare | 380 | ja |
+| Ghostly | `ghostly` | Epic | 600 | ja |
+| Spin | `spin` | Epic | 650 | |
+| Big Head | `bighead` | Epic | 780 | ja |
+| Dance | `dance` | Epic | 800 | |
+| Backflip | `flip` | Epic | 900 | ja |
+| Power Up | `fire` | Legendary | 1600 | ja |
+| Levitate | `levitate` | Legendary | 1800 | |
+| Mind Blown | `mindblown` | Legendary | 2200 | ja |
+
+Dazu kommen drei alte Emotes außerhalb des normalen Verkaufs, Preis und Herkunft sind unverändert: Zombie Walk (`zombie`, Common, 150, limitiert), Boo! (`boo`, Rare, 480, limitiert) und Robot (`robot`, Rare, 300, Saison). Insgesamt sind es 32 Emotes.
+
+### Bedienung
+
+- **Rad:** Taste halten (Standard B), mit der Maus ein Feld wählen, loslassen oder klicken. Das Rad hat jetzt 3 Seiten mit je 8 Feldern. Die Seite wechselst du mit dem Mausrad oder den Pfeiltasten. Die Belegung stellst du im Inventar ein, dort gibt es dafür die Knöpfe `<` und `>`.
+- **Vorschau im Shop und Inventar:** Die Figur spielt das ganze Emote in Schleife, mit Effekten. In der großen Ansicht zeigt eine Zeitleiste den Fortschritt, die Marken darauf stehen für die Effekte.
+- **Abbrechen:** Ein Emote blendet in 0,3 Sekunden weich aus. Startest du ein neues, blendet das alte in 0,28 Sekunden über.
+
+### Neue Einstellungen im Modul Emotes
+
+| Einstellung | Standard | Wirkung |
+|---|---|---|
+| Effects | an | Partikel und Symbole bei Emotes |
+| Effect strength | 100 % | Menge der Partikel, 25 bis 150 % |
+| Cooldown | 1 s | Wartezeit bis zum nächsten eigenen Emote, 0 bis 10 s. Der Backflip wartet immer mindestens 3 s |
+| Third person while emoting | aus | Schaltet während des eigenen Emotes auf die Frontansicht und danach zurück |
+
+### Grenzen
+
+- **Skalierung:** Der Kopf bleibt zwischen 0,2- und 3-fach, der Rumpf zwischen 0,6- und 1,9-fach, die ganze Figur zwischen 0,5- und 1,6-fach. Diese Grenzen gelten beim Anzeigen für jeden Spieler. Der Backflip steigt höchstens 1 Block hoch.
+- **Entfernung:** Bis 32 Blöcke siehst du Animation und Effekte, ab 32 Blöcken nur die Animation, ab 64 Blöcken nichts mehr.
+- **Effekte:** Sie sind Sprites, keine Welt-Partikel. Sie gehören zur Figur und drehen sich mit ihrem Körper. Ton gibt es keinen.
+- **Erste Person:** Deine Arme bewegen sich in der Ego-Sicht nicht mit. Das Emote siehst du nur von außen, zum Beispiel mit F5 oder der neuen Kamera-Option.
+- **Ghostly** macht die Figur nicht wirklich durchsichtig, weil das nicht sauber ging. Stattdessen schwebt sie in kaltem Nebel.
+- **Abbruch und Besitz bei anderen:** Das Backend überträgt nur den Start eines Emotes. Brichst du ab, spielen andere es zu Ende. Ob jemand ein Emote wirklich besitzt, kann dein Client nicht prüfen, weil Wallets nur lokal liegen. Unbekannte Ids werden ausgeblendet.
+- **Goon Shop:** Die neuen Emotes kommen auch in die stündliche Rotation. Deshalb ändert sich deren Auswahl einmalig gegenüber der Vorversion.
+
+### Getestet und nicht getestet
+
+- **Getestet:** Alle 32 Emotes liefen im echten Spiel und wurden zu je 6 Zeitpunkten auf Kontaktbögen geprüft. Dazu kamen Abbruch, Cooldown, Kamera-Option, Rad-Seiten und die Vorschau im Inventar. `tools/EmoteLogicTest.java` prüft Stetigkeit, neutrale Enden, NaN, Grenzen, die nahtlose Dance-Schleife, Effekt-Marken, Katalog und alte Wallets.
+- **Nicht getestet:** Die Anzeige bei einem echten zweiten Spieler, also auch die Entfernungsstufen und das angehobene Namensschild beim Riesenkopf. Die Flüssigkeit wurde nicht als Video geprüft, sondern nur rechnerisch und auf Einzelbildern.
+
+### Technik
+
+- `EmoteEngine.Pose` hat neue Felder für Kopf-, Rumpf- und Gesamtskalierung, Neigung, Überschlag und Versatz. `xScale`, `yScale` und `zScale` von `ModelPart` gibt es in 1.21.11, das hat der Compiler bestätigt.
+- Dazu kommen Easing (`Ease`) und Keyframes (`Key`, `track`) sowie der eigene Effekt-Spieler `EmoteFx` mit Daten statt Code. Der Partikel-Atlas hat eine vierte Reihe: Fragezeichen, Z, Note, Schlag, Konfetti, Ausrufezeichen, Rauch und Druckwelle.
+- Das Rad hat in der Wallet 24 Plätze. Alte Wallet-Dateien laden weiter und ihre Signatur bleibt gültig, solange die Seiten 2 und 3 leer sind.
+
 ## Update 3.69.0: Auren springen beim Sprung nicht mehr
 
 - **Fehler:** Beim Absprung sprangen alle Teilchen einer Aura im selben Moment bis zu 4 Pixel nach außen und wurden schlagartig heller. Das sah aus, als würde die Animation neu starten.
