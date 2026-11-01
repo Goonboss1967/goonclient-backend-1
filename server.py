@@ -21,7 +21,8 @@ Schnittstelle (alles JSON):
   POST /v1/auth/challenge                      -> {"serverId": "..."}
   POST /v1/auth/verify   {"username","serverId"} -> {"token","uuid","expiresIn"}
   PUT  /v1/cosmetics     (Authorization: Bearer <token>) Body: Cosmetics-Objekt
-  GET  /v1/cosmetics?uuids=<uuid>,<uuid>,...   (höchstens 100) -> {"players": {"<uuid>": Cosmetics-Objekt}}
+  GET  /v1/cosmetics?uuids=<uuid>,<uuid>,...   (höchstens 100) -> {"players": {"<uuid>": Cosmetics-Objekt}, "active": ["<uuid>", ...]}
+       ("active" = hat in den letzten 15 Minuten hochgeladen, spielt also gerade mit GoonClient)
   POST /v1/redeem/code   (Authorization: Bearer <token>) {"code": "<eingetippter Code>"} -> 200 {"ok", "id", "coins"},
                          400 ungültig, 409 schon eingelöst, 410 abgelaufen/aufgebraucht. Codes stehen in codes.json (add_code.py).
   POST /v1/redeem        (alt, Client 3.8-3.9) {"id": "<code-id>"} -> 200 {"ok": true} oder 409 (schon eingelöst)
@@ -68,6 +69,7 @@ MAX_CODE_COINS = 100000
 CHALLENGE_TTL = 60
 TOKEN_TTL = 3600
 RECORD_MAX_AGE = 60 * 24 * 3600  # 60 Tage ohne Lebenszeichen: Eintrag wird gelöscht
+ACTIVE_MAX_AGE = 15 * 60  # Clients laden alle 5 Minuten hoch: so lange gilt ein Spieler als aktiver GoonClient-Nutzer
 
 DEFAULTS = {
     "cape": "", "badge": "", "badgeColor": 0xFFFFFF, "badgeText": "", "badgePrefix": False,
@@ -328,6 +330,13 @@ class Store:
                 if row:
                     result[uid] = json.loads(row[0])
         return result
+
+    def active_among(self, uids, max_age=ACTIVE_MAX_AGE):
+        """Wer von diesen Spielern hat kürzlich hochgeladen (= spielt gerade mit GoonClient)?"""
+        since = time.time() - max_age
+        with self.lock:
+            return [uid for uid in uids
+                    if self.db.execute("SELECT 1 FROM cosmetics WHERE uuid=? AND updated>=?", (uid, since)).fetchone()]
 
 
 CODE_SALT = "goonclient-code-v1|"
@@ -937,7 +946,8 @@ def make_handler(state):
                             uids.append(norm_uuid(part))
                     if len(uids) > MAX_UUIDS:
                         return self.error(400, "too many uuids (max %d)" % MAX_UUIDS)
-                    return self.send_json(200, {"players": state.store.get_many(list(dict.fromkeys(uids)))})
+                    uids = list(dict.fromkeys(uids))
+                    return self.send_json(200, {"players": state.store.get_many(uids), "active": state.store.active_among(uids)})
                 if parsed.path == "/v1/emotes":
                     if not self.guard("emotes", 600):
                         return
