@@ -456,6 +456,19 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.54.0: Namensschilder in der Tab-Liste und GoonClient-Symbol
+
+- **Tab-Liste:** Animierte Namensschilder und Badges von GoonClient-Spielern erscheinen jetzt auch in der Tab-Liste,
+  genau wie über dem Kopf.
+- **GoonClient-Symbol:** Jeder, der gerade mit GoonClient spielt, hat vor seinem Namen und vor seiner Badge ein kleines
+  lila GoonClient-"G", über dem Kopf und in der Tab-Liste, auch ohne gekaufte Cosmetics. Ausschalten:
+  Goon Cosmetics → "What I see from other players" → **"GoonClient icon"**.
+- **Rang bleibt:** Animiert wird nur noch der Spielername selbst. Rang, Farben und Zusätze des Servers (z.B. "VIP" davor,
+  Clan dahinter) bleiben unverändert; Symbol und Badge stehen direkt vor dem Namen: `VIP [G] BOSS Name blubby`.
+- Spieler außerhalb der Sichtweite werden für die Tab-Liste beim GoonClient-Server nachgefragt (alle 60 Sekunden).
+- Server: `/v1/cosmetics` meldet zusätzlich, wer in den letzten 15 Minuten online war (`"active"`); nur diese Spieler
+  bekommen das Symbol. Dafür `server.py` hochladen. Mit der alten `server.py` bekommt jeder mit Eintrag das Symbol.
+
 ## Update 3.53.1: Freunde-Modul repariert
 
 - **Fix: Freunde wurden auf vielen Servern nicht hervorgehoben** (kein Stern, keine Freundesfarbe über dem Kopf, in der
