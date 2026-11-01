@@ -456,6 +456,12 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.78.0: Wolken lassen sich wieder ausschalten
+
+- **Fehler:** Mit einem Sky, der eigene Wolken hat (zum Beispiel Cotton Clouds), blieben diese sichtbar, obwohl in den Videoeinstellungen von Minecraft "Clouds: Off" eingestellt war.
+- **Jetzt:** "Clouds: Off" gilt auch für die Wolken des Skys. Die Einstellung "Clouds" unter Goon Cosmetics schaltet sie weiterhin einzeln aus.
+- **Vorschau:** In Shop und Inventar zeigt die Vorschau einen Sky immer mit seinen Wolken, damit man sieht, wie er aussieht.
+
 ## Update 3.77.0: Skys im normalen Goon Shop
 
 - **Geändert:** Skys kommen jetzt in die normale stündliche Rotation des Goon Shops, wie alle anderen Items. Es gelten dieselben Seltenheits-Chancen und dieselben 8 Plätze.
