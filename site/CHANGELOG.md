@@ -456,6 +456,28 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.56.0: Exklusive Items per Code – Hacker Orbit
+
+- **Neue Seltenheit "Exclusive"** (pink): Items, die es **nur über einen Redeem-Code** gibt. Sie kommen nie in den
+  Hourly Shop, lassen sich nicht kaufen, nicht verschenken und nicht auf die Wunschliste setzen. Jedes Item, das es
+  künftig per Code gibt, ist exklusiv. Im Inventar steht bei ihnen "Exclusive item - only from a redeem code".
+- **Hacker Orbit** (Accessoire, Exclusive): leuchtend grüne Code-Zeichen (0, 1, <, >, /, #) kreisen in zwei Höhen um
+  den Kopf, dazwischen kleine Datenpunkte. Jeder Pixel flackert einzeln wie auf einem Terminal. Das Gesicht bleibt frei.
+- **Codes können Items geben:** In `codes.json` gibt ein Eintrag mit `"item": "accessory.hackerorbit"` das Item
+  zusätzlich (Coins dürfen dann 0 sein). Neuer Code: `py -3 tools/backend/add_code.py 0 --item accessory.hackerorbit`.
+  Das Item muss im Client als exklusives Item eingebaut sein.
+  - Clients vor 3.56.0 können solche Codes nicht einlösen (der Server antwortet "update GoonClient"), damit niemand
+    den Code verbraucht, ohne das Item zu bekommen.
+  - Wie bei Coins gilt jeder Code pro Konto nur einmal, und das Item ist gegen Bearbeiten der Datei geschützt.
+- Server: `server.py` und `codes.json` hochladen.
+
+## Update 3.55.0: Pack Mixer – Wind Charges
+
+- Neues Abteil **Wind Charges** im Pack Mixer (unter "Ender Pearls"), mit Vanilla und allen Pack-Varianten:
+  - **Wind Charge:** das Item zusammen mit der fliegenden Kugel (`entity/projectiles/wind_charge`); wer die Wind Charge aus
+    einem Pack wählt, bekommt beides.
+  - **Wind Burst:** der Windstoß beim Aufprall (alle Bilder von `particle/gust_*` und `particle/small_gust_*`) als ein Paket.
+
 ## Update 3.54.0: Namensschilder in der Tab-Liste und GoonClient-Symbol
 
 - **Tab-Liste:** Animierte Namensschilder und Badges von GoonClient-Spielern erscheinen jetzt auch in der Tab-Liste,

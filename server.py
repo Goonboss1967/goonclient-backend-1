@@ -341,6 +341,7 @@ class Store:
 
 CODE_SALT = "goonclient-code-v1|"
 CODE_ID_RE = re.compile(r"^[a-z0-9_]{1,32}$")
+ITEM_ID_RE = re.compile(r"^[a-z]{1,16}\.[a-z0-9_]{1,32}$")  # Shop-Id, z.B. accessory.hackerorbit
 CODE_HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -359,6 +360,8 @@ class Codes:
     auf Änderungen geprüft; neue Codes gelten also sofort, ohne Neustart und ohne neue Client-Version.
     Eintrag: {"id": "bonus3000", "hash": "<sha256>", "coins": 3000, "maxUses": 50, "expires": "2026-12-31"}
     (maxUses = höchstens so viele Spieler insgesamt, expires = letzter gültiger Tag; beide optional).
+    Mit "item": "accessory.hackerorbit" gibt der Code zusätzlich ein exklusives Item (dann darf "coins" 0 sein).
+    Clients vor 3.56.0 kennen keine Items: für sie gilt ein Item-Code nicht (426), damit niemand den Code ohne Item verbraucht.
     """
 
     def __init__(self, path):
@@ -385,15 +388,20 @@ class Codes:
         for c in raw.get("codes", []) if isinstance(raw, dict) else []:
             if not isinstance(c, dict):
                 continue
-            cid, h, coins = c.get("id"), c.get("hash"), c.get("coins")
+            cid, h, coins = c.get("id"), c.get("hash"), c.get("coins", 0)
+            item = c.get("item", "")
+            if not (isinstance(item, str) and (item == "" or ITEM_ID_RE.match(item))):
+                print("codes.json: invalid item, entry skipped: %r" % (c,))
+                continue
             if not (isinstance(cid, str) and CODE_ID_RE.match(cid) and isinstance(h, str) and CODE_HASH_RE.match(h)
-                    and isinstance(coins, int) and not isinstance(coins, bool) and 0 < coins <= MAX_CODE_COINS):
+                    and isinstance(coins, int) and not isinstance(coins, bool) and 0 <= coins <= MAX_CODE_COINS
+                    and (coins > 0 or item)):
                 print("codes.json: invalid entry skipped: %r" % (c,))
                 continue
             max_uses = c.get("maxUses")
             public_code = c.get("code") if c.get("public") is True and isinstance(c.get("code"), str) \
                 and hash_code(normalize_code(c.get("code"))) == h else None  # nur zeigen, wenn Klartext und Hash passen
-            table[h] = {"id": cid, "coins": coins,
+            table[h] = {"id": cid, "coins": coins, "item": item,
                         "maxUses": max_uses if isinstance(max_uses, int) and max_uses > 0 else None,
                         "expires": c.get("expires") if isinstance(c.get("expires"), str) else None,
                         "public": public_code}
@@ -1044,11 +1052,16 @@ def make_handler(state):
                         return self.error(400, "invalid code")
                     if code_expired(entry):
                         return self.error(410, "code expired")
+                    if entry["item"] and body.get("items") is not True:
+                        return self.error(426, "update GoonClient to redeem this code")
                     if entry["maxUses"] is not None and state.store.claim_count(entry["id"]) >= entry["maxUses"]:
                         return self.error(410, "code used up")
                     if not state.store.claim(uid, entry["id"]):
                         return self.error(409, "already redeemed")
-                    return self.send_json(200, {"ok": True, "id": entry["id"], "coins": entry["coins"]})
+                    reply = {"ok": True, "id": entry["id"], "coins": entry["coins"]}
+                    if entry["item"]:
+                        reply["item"] = entry["item"]
+                    return self.send_json(200, reply)
                 if is_redeem:
                     uid = state.uuid_for(self.bearer())
                     if uid is None:
