@@ -460,7 +460,8 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
 
 - **Neu:** Einlösbare Codes können jetzt neben Goon Coins auch Event-Coins geben, zum Beispiel Halloween Coins. Mit `add_code.py` zum Beispiel: `py -3 tools/backend/add_code.py 1000 --event-coins 500 --event-currency halloween`.
 - **Ältere Clients:** Sie bekommen bei so einem Code die Meldung, dass sie GoonClient aktualisieren sollen. Der Code bleibt dabei unverbraucht.
-- **Backend:** `tools/backend/server.py` und `tools/backend/codes.json` müssen in `Goonboss1967/goonclient-backend` ersetzt werden. Der Client braucht mindestens Version 3.76.0.
+- **Website:** Öffentliche Codes zeigen ihre Event-Coins jetzt auf der Karte, mit dem Hinweis "ab Version 3.76.0".
+- **Backend:** `tools/backend/server.py`, `tools/backend/codes.json` und `tools/backend/site/index.html` müssen in `Goonboss1967/goonclient-backend` ersetzt werden. Der Client braucht mindestens Version 3.76.0.
 
 ## Update 3.75.0: Skys und der Hourly Shop
 

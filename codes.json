@@ -60,7 +60,9 @@
       "coins": 1000,
       "eventCoins": 500,
       "eventCurrency": "halloween",
-      "expires": "2026-11-06"
+      "expires": "2026-11-06",
+      "public": true,
+      "code": "GOON-LN6L-PGWD"
     }
   ]
 }

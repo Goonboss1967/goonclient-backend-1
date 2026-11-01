@@ -223,6 +223,8 @@
   .code::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, .06) 50%, transparent 60%); transform: translateX(-100%); animation: shine 4s ease-in-out infinite; pointer-events: none; }
   @keyframes shine { 60%, 100% { transform: translateX(100%); } }
   .code .coins { display: flex; align-items: center; gap: 10px; font-size: 26px; font-weight: 800; color: var(--gold); }
+  .code .coins.event { margin-top: 8px; font-size: 18px; color: #ff9a3c; }
+  .code .coins.event .coin { background: #ff7a1a; }
   .coin { width: 28px; height: 28px; border-radius: 50%; background: var(--gold); color: #171717; display: grid; place-items: center; font-size: 15px; font-weight: 900; box-shadow: 0 0 14px rgba(255, 255, 255, .2); }
   .code .value { margin: 14px 0 12px; display: flex; gap: 10px; align-items: center; }
   .code .value code { font-size: 16px; padding: 9px 10px; letter-spacing: .5px; flex: 1; min-width: 0; text-align: center; white-space: nowrap;
@@ -882,10 +884,19 @@
       const extra = [];
       if (c.usesLeft != null) extra.push("noch " + c.usesLeft + "× einlösbar");
       if (c.expires) extra.push("gültig bis " + new Date(c.expires + "T00:00:00").toLocaleDateString("de-DE"));
+      if (c.eventCoins) extra.push("ab Version 3.76.0");
       if (!extra.length) extra.push("einmal pro Account");
       el.innerHTML = '<div class="coins"><div class="coin">G</div><span></span> Goon Coins</div>'
         + '<div class="value"><code></code><button class="btn gold">Kopieren</button></div><div class="note"></div>';
       el.querySelector(".coins span").textContent = c.coins.toLocaleString("de-DE");
+      if (c.eventCoins) {
+        const name = String(c.eventCurrency || "Event");
+        const ev = document.createElement("div");
+        ev.className = "coins event";
+        ev.innerHTML = '<div class="coin">E</div><span></span>';
+        ev.querySelector("span").textContent = "+ " + c.eventCoins.toLocaleString("de-DE") + " " + name.charAt(0).toUpperCase() + name.slice(1) + " Coins";
+        el.querySelector(".coins").after(ev);
+      }
       el.querySelector("code").textContent = c.code;
       el.querySelector(".note").textContent = extra.join(" · ");
       el.querySelector("button").onclick = () => {

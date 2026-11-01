@@ -952,7 +952,8 @@ def make_handler(state):
                     left = None if e["maxUses"] is None else max(0, e["maxUses"] - used)
                     if code_expired(e) or left == 0:
                         continue  # abgelaufene oder aufgebrauchte Codes nicht mehr zeigen
-                    codes.append({"code": e["public"], "coins": e["coins"], "expires": e["expires"], "usesLeft": left,
+                    codes.append({"code": e["public"], "coins": e["coins"], "eventCoins": e["eventCoins"],
+                                  "eventCurrency": e["eventCurrency"], "expires": e["expires"], "usesLeft": left,
                                   "redeemed": used})
                 size = len(state.site.jar_bytes(name) or b"") if name else 0
                 self.send_json(200, {"version": version, "file": name, "size": size, "updates": updates,
