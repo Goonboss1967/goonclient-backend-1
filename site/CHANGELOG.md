@@ -456,6 +456,118 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.87.0: Chat-Befehle /msg und /r entfernt
+
+Der Freunde-Chat hat keine eigenen Befehle mehr. Geschrieben wird im Chat-Tab und im Overlay. `/msg` und `/r` gehören damit wieder ganz dem Server: GoonClient fängt sie nicht mehr ab, und Nachrichten an Freunde gehen darüber nicht mehr in den Freunde-Chat.
+
+## Update 3.86.0: Hüte, Accessoires und Flügel neu gestaltet
+
+Alle 54 Items sind neu gebaut: 19 Hüte, 14 Flügel, 21 Accessoires. Ids, Namen, Preise, Seltenheiten, Besitz (`wallet.json`), Konfigurationen und Sync bleiben unverändert, das Protokoll auch. Neue Ids gibt es nicht. Zuordnung: Mechanik ist `circuit`, Kristall ist `ice`, Geist ist `shadow`, Brillen sind `glasses` und `monocle`, die Maske ist `bandana`, Helme sind `viking` und `cyberhelm`.
+
+### Neue Gestaltung
+- **Eigene Textur je Item** statt einer gemeinsamen weißen Fläche: 512 Pixel breit, 4 Texel pro Modell-Pixel. Jedes Teil bekommt fünf Töne aus seiner Farbe, Licht von oben links und ein Materialmuster: Stoff, Filz, Strick, Leder mit Naht, Metall mit Glanzkante, Gold, Edelstein, Kristall, Glas mit Reflex, Fell, Feder mit Kiel, Haut mit Adern, Schuppen, Knochen und mehr.
+- **Formen statt Klötzchen**: Flache Teile bekommen über Transparenz einen Umriss, zum Beispiel Feder, Flamme, Zacke, Blatt, Stern oder Hautbahn. Teile können gedreht sein, runde Körper sind Achtecke.
+- **Gelenke**: Federn, Quasten, Bänder und Ketten schwingen nach. Flügel haben je Seite Schulter, Arm, Hand und zwei Federreihen, jedes Segment läuft dem vorigen nach.
+- **Flügelbewegung**: ruhiges Atmen im Stand, leichtes Auffächern beim Laufen, kräftiges Schlagen beim Sprinten und Springen, Anheben beim Fallen, Anlegen beim Schleichen und Schwimmen, mit weichen Übergängen.
+- **Seltenheit**: Common schlicht, ab Epic immer Leuchtteile, Legendary mit den meisten Teilen und Effekten. Prism und Cosmic behalten ihr Farbspiel, aber deutlich ruhiger.
+- **Leuchtteile** sind eigene Modellteile mit `entityTranslucentEmissive` und voller Helligkeit, keine zweite Textur. Sie pulsieren sanft und flackern nicht.
+- **Effekte**: Federn, Funken, Glitzer oder Kristallstaub an einigen Flügeln und Accessoires, höchstens 8 je Item. Beim Sprinten werden es mehr. Abschaltbar.
+
+### Konfliktregeln
+- **Rucksack und Flügel**: Die Flügel rücken um 3,4 Pixel nach hinten.
+- **Cape und Flügel**: Einstellung **With cape** bei den Flügeln. **Hide cape** (Standard) blendet das Cape aus, **Move wings back** rückt die Flügel 1,6 Pixel nach hinten. Sie schneiden sich dann beim Laufen trotzdem etwas, weil das Cape weit ausschwingt.
+- **Elytra und Flügel**: Die Flügel werden ausgeblendet, die Elytra hat Vorrang.
+- **Hoher Hut**: Das Namensschild rückt nur so weit hoch wie nötig, höchstens 0,45 Blöcke.
+- Die Regeln gelten für jeden Spieler nach den Einstellungen des Betrachters.
+
+### Vorschau und Einstellungen
+- Große Vorschau in Shop und Inventar: mit der Maus drehen, **Reset view**, bei Flügeln Stand, Walk, Sprint, Jump, dazu **With my outfit** für Hut, Accessoire und Flügel zusammen. Seltenheitsrahmen, leichter Schein ab Epic.
+- Hut: **Size**, **Effects**. Flügel: **Size**, **Flap strength**, **Particles**, **With cape**. Accessoire: **Effects**. **Size** und **Flap strength** gelten nur für die eigene Ansicht, andere Spieler sehen die Normalgröße. Ein Accessoire hat keine Größe, weil es sonst nicht mehr am Gesicht säße.
+- "Goon Cosmetics" hat für diese Plätze keine eigene große Vorschau bekommen, sie liegt in Shop und Inventar.
+
+### Technik und Leistung
+- Daten in `ArtHats`, `ArtWings`, `ArtAccessories` mit dem Baukasten `ArtKit`. Neues Item: dort eine Methode ergänzen, im `ShopCatalog` eintragen, Skript laufen lassen.
+- Jedes Gelenk ist ein einmal gebautes Modellteil, gezeichnet wird über die PoseStack. Im eigenen Code entsteht pro Bild nichts Neues. Grenzen je Item: 90 Teile, 24 Gelenke, im Test geprüft.
+- Entfernung: Ab 32 Blöcken fallen Nachschwingen, Hand und Teilchen weg, ab 64 Blöcken steht das Modell still.
+
+### Texturen neu erzeugen
+Nach einem Build, im Projektordner:
+```bash
+java -cp "build/classes/java/client;build/classes/java/main" tools/GenerateCosmeticAccessories.java
+```
+Das schreibt `textures/accessory/items/<id>.png`. `tools/AccessoryArtTest.java` meldet, wenn eine Textur nicht mehr zu den Daten passt.
+
+### Vorher und nachher
+Vorher nutzten alle Items dieselbe weiße Textur ohne Gelenke.
+
+| Item | Platz | Seltenheit | Teile vorher | Teile nachher | Gelenke | Textur nachher |
+|---|---|---|---|---|---|---|
+| cap | Hat | Common | 3 | 14 | 1 | 512x96 |
+| beanie | Hat | Common | 3 | 20 | 1 | 512x192 |
+| chef | Hat | Uncommon | 3 | 24 | 1 | 512x224 |
+| tophat | Hat | Uncommon | 3 | 18 | 1 | 512x288 |
+| cowboy | Hat | Uncommon | 6 | 16 | 1 | 512x224 |
+| wizard | Hat | Rare | 9 | 29 | 2 | 512x256 |
+| crown | Hat | Rare | 13 | 45 | 1 | 512x192 |
+| viking | Hat | Rare | 12 | 46 | 1 | 512x192 |
+| flamecrown | Hat | Epic | 10 | 49 | 9 | 512x192 |
+| cosmic | Hat | Legendary | 9 | 42 | 2 | 512x320 |
+| headband | Hat | Common | 4 | 9 | 2 | 512x96 |
+| partyhat | Hat | Uncommon | 6 | 45 | 2 | 512x160 |
+| santa | Hat | Uncommon | 7 | 20 | 2 | 512x256 |
+| witch | Hat | Rare | 8 | 29 | 2 | 512x320 |
+| propeller | Hat | Epic | 7 | 21 | 2 | 512x128 |
+| starcrown | Hat | Legendary | 11 | 50 | 2 | 512x160 |
+| reaperhood | Hat | Rare | 10 | 18 | 1 | 512x192 |
+| jackolantern | Hat | Epic | 18 | 23 | 1 | 512x160 |
+| cyberhelm | Hat | Epic | 10 | 23 | 2 | 512x192 |
+| paper | Wings | Common | 4 | 10 | 11 | 512x64 |
+| bat | Wings | Uncommon | 14 | 26 | 11 | 512x192 |
+| fairy | Wings | Rare | 8 | 12 | 11 | 512x64 |
+| angel | Wings | Rare | 12 | 50 | 11 | 512x224 |
+| demon | Wings | Epic | 16 | 42 | 11 | 512x288 |
+| dragon | Wings | Epic | 19 | 50 | 11 | 512x320 |
+| phoenix | Wings | Legendary | 14 | 66 | 11 | 512x288 |
+| prism | Wings | Legendary | 16 | 71 | 11 | 512x288 |
+| butterfly | Wings | Uncommon | 18 | 5 | 11 | 512x96 |
+| shadow | Wings | Rare | 16 | 36 | 11 | 512x224 |
+| ice | Wings | Epic | 14 | 40 | 11 | 512x192 |
+| skeleton | Wings | Rare | 22 | 40 | 11 | 512x128 |
+| vampire | Wings | Epic | 20 | 42 | 11 | 512x288 |
+| circuit | Wings | Epic | 26 | 46 | 11 | 512x192 |
+| glasses | Accessory | Common | 6 | 14 | 1 | 512x32 |
+| headphones | Accessory | Common | 7 | 12 | 1 | 512x64 |
+| catears | Accessory | Uncommon | 8 | 9 | 1 | 512x96 |
+| scarf | Accessory | Uncommon | 5 | 12 | 2 | 512x64 |
+| backpack | Accessory | Uncommon | 8 | 20 | 1 | 512x96 |
+| horns | Accessory | Rare | 6 | 18 | 1 | 512x32 |
+| visor | Accessory | Epic | 5 | 12 | 1 | 512x64 |
+| halo | Accessory | Epic | 4 | 10 | 2 | 512x64 |
+| crystals | Accessory | Legendary | 6 | 24 | 2 | 512x32 |
+| mustache | Accessory | Common | 5 | 5 | 1 | 512x32 |
+| bowtie | Accessory | Common | 5 | 6 | 1 | 512x32 |
+| monocle | Accessory | Uncommon | 6 | 9 | 2 | 512x32 |
+| bandana | Accessory | Uncommon | 9 | 14 | 2 | 512x96 |
+| flowercrown | Accessory | Rare | 10 | 30 | 1 | 512x128 |
+| wisps | Accessory | Epic | 4 | 24 | 2 | 512x32 |
+| aura | Accessory | Legendary | 8 | 17 | 2 | 512x96 |
+| fangs | Accessory | Common | 5 | 5 | 1 | 512x32 |
+| spider | Accessory | Uncommon | 21 | 30 | 9 | 512x64 |
+| ghosts | Accessory | Legendary | 12 | 45 | 2 | 512x64 |
+| cubes | Accessory | Epic | 8 | 28 | 2 | 512x64 |
+| hackerorbit | Accessory | Exclusive | 75 | 75 | 2 | 512x64 |
+
+### Grenzen
+- Alle Teile sind Quader und flache Karten. Von der Seite gesehen verschwinden flache Karten fast, zum Beispiel die Zacken der Kronen (dafür gibt es Stege) und Federspitzen.
+- Getestet wurde mit einem Testskin. Skins mit ungewöhnlich sitzendem Gesicht passen zu Schnurrbart und Reißzähnen nicht immer, sie liegen an der üblichen Stelle.
+- Rüstung: Ein Helm schneidet mit Hüten und anderem am Kopf, wie schon zuvor.
+
+### Getestet
+- `tools/AccessoryArtTest.java`: Teile-Hierarchie, UV-Bereiche ohne Überlappung, Leuchtmasken, Drehpunkte, Gelenkwinkel, NaN, Konfliktregeln, Teilchen-Grenzen, Sitz, Ids, Preise, Wallet.
+- Im echten Spiel: Prüfbogen für jedes Item (vorne, Seite, hinten, schräg, bei Flügeln Walk, Sprint, Jump), außerdem echter Spieler in der Welt mit Hut, Rucksack und Flügeln im Stand, beim Sprinten und Schleichen.
+
+**Nicht getestet**: andere Spieler auf einem echten Server, Emotes und Mounts zusammen mit den neuen Hüten, Fallen und Schwimmen im Spiel (nur in der Logik), die FPS-Wirkung mit vielen Spielern, Maus-Ziehen in der Vorschau von Hand, Elytra, "Move wings back" und die Höhe des Namensschilds im Bild (nur in der Logik). Neue Mixins gibt es nicht: Cape und Namensschild laufen über den vorhandenen Eingriff mit `require = 0`.
+
 ## Update 3.85.0: Weather & Time Changer
 
 Neues Modul in der Kategorie **Render**: Tageszeit und Wetter nur in der eigenen Ansicht. Es startet im Vanilla-Verhalten und verändert nichts, solange nichts eingestellt ist. Zusätzlich gibt es das HUD-Modul **Weather & Time** (Uhrzeit und Wetter, einzeln abschaltbar).
@@ -539,7 +651,7 @@ Neuer Tab **Chat**: privater 1:1-Chat mit bestätigten Freunden, auf jedem Serve
 - **Freunde**: Chatten geht nur mit Spielern, die eine Anfrage angenommen haben. Lokale Freunde ohne Verbindung stehen im Chat-Tab unter "Not connected yet" mit dem Knopf **Request**. Offene Anfragen lassen sich dort auch annehmen. Höchstens 100 verbundene Freunde (`MAX_FRIENDS`).
 - **Chat-Tab**: links Freunde mit Status und Ungelesen-Zähler, rechts der Verlauf. Enter sendet. Nach oben scrollen lädt ältere Nachrichten. Fährt man über eine Nachricht: **x** löscht die eigene für beide, **!** meldet die fremde (jeweils zweimal klicken). Oben: Mute, Clear (nur hier löschen), Report, Block.
 - **Overlay im Spiel**: Taste **O** (änderbar) öffnet den kleinen Chat. Esc schließt. Das Spiel läuft weiter.
-- **Befehle**: `/msg <freund> <text>` und `/r <text>`. Ist das Ziel kein verbundener Freund, geht der Befehl an den Server, das normale `/msg` bleibt also nutzbar. Ohne letzten Gesprächspartner geht auch `/r` an den Server.
+- **Befehle**: Die Chat-Befehle `/msg` und `/r` wurden in 3.87.0 wieder entfernt.
 - **Emojis**: `:gg:`, `:goon:`, `:coin:`, `:totem:`, `:creeper:`, `:sus:` und 74 weitere. Beim Tippen von `:` erscheint eine Vervollständigung (Tab oder Enter wählt). Standard-Emojis werden beim Senden zu eigenen, was keine Entsprechung hat, wird zu `?`. Unbekannte Kürzel bleiben Text.
 - **Sticker**: Knopf neben dem Eingabefeld: Reiter pro Paket, Last (zuletzt benutzt), Favs (Stern), Suche. Übertragen wird nur die Id (`goonclassic.gg`). Unbekannte Ids erscheinen als `[Sticker]`.
 - **Pakete**: Goon Classic (14) ist frei. Minecraft Vibes (10, 120 Coins), Memes (11, 300) und Animated (9, 700) kommen als Kategorie "Stickers" in die normale Goon-Shop-Rotation. Empfänger sehen immer alle Sticker. Der Besitz wird nur im Client geprüft; das Backend prüft nur das Format, ein veränderter Client könnte also fremde Pakete senden.
