@@ -70,6 +70,22 @@
       "expires": "2026-11-06",
       "public": true,
       "code": "GOON-LN6L-PGWD"
+    },
+    {
+      "id": "code0_6c42b6",
+      "hash": "a72c2cafe99f82e29c7e58ac6858ee92faecfee37489a854aff8a39edb4f597a",
+      "coins": 0,
+      "item": "mount.signature_gb19",
+      "maxUses": 1,
+      "expires": "2026-11-09"
+    },
+    {
+      "id": "code0_6e972a",
+      "hash": "b16210db3f56507f66be1079db5f47f88a744c4f83a06f267ea95ac2e0a1a79f",
+      "coins": 0,
+      "item": "mount.signature_gb19",
+      "maxUses": 1,
+      "expires": "2026-11-09"
     }
   ]
 }
