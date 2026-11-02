@@ -5,26 +5,30 @@
       "hash": "819668148b8635483a9b2aca2d71d7502c694924d238a095be2171859fc4feda",
       "coins": 100,
       "public": true,
-      "code": "GOON-9GAT-ZTY7"
+      "code": "GOON-9GAT-ZTY7",
+      "expires": "2026-11-09"
     },
     {
       "id": "bonus3000",
       "hash": "45c00347cc35b8e6880fe3ec4ace5e74994351e42c1050838335abd20edd7851",
-      "coins": 3000
+      "coins": 3000,
+      "expires": "2026-11-09"
     },
     {
       "id": "hourly1000",
       "hash": "61fe062875f98cc2680dfc2b9671e6dca9d087ffa2d1be9d0e95e2db5f6ba316",
       "coins": 1000,
       "public": true,
-      "code": "GOON-HOURLY-1000"
+      "code": "GOON-HOURLY-1000",
+      "expires": "2026-11-09"
     },
     {
       "id": "upgrade1250",
       "hash": "b288bcb80a527109f19b3d96c1f3c27a7813f17d4c1525627821874f167a5919",
       "coins": 1250,
       "public": true,
-      "code": "GOON-UPGRADE-1250"
+      "code": "GOON-UPGRADE-1250",
+      "expires": "2026-11-09"
     },
     {
       "id": "halloween2026",
@@ -39,20 +43,23 @@
       "hash": "fb1fcab891f8ea25fc865ce9c4d5f74068ef57fb4730b2c76cc01ef34ebd227a",
       "coins": 1500,
       "public": true,
-      "code": "GOON-SORRY-1500"
+      "code": "GOON-SORRY-1500",
+      "expires": "2026-11-09"
     },
     {
       "id": "hackerorbit",
       "hash": "c7e4f93ce6e1d62d4549038f60818d3c87fec9446ba59748fafa21a2c9ac27c6",
       "coins": 0,
-      "item": "accessory.hackerorbit"
+      "item": "accessory.hackerorbit",
+      "expires": "2026-11-09"
     },
     {
       "id": "bonus3000b",
       "hash": "8641c2014c52c49b4c496b3dbef199c85900173d2ffc446310802c1838234d9a",
       "coins": 3000,
       "public": true,
-      "code": "GOON-KJ93-S2WC"
+      "code": "GOON-KJ93-S2WC",
+      "expires": "2026-11-09"
     },
     {
       "id": "party1000h",

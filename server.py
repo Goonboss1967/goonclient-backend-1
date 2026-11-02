@@ -16,15 +16,18 @@ Starten:   python3 server.py --host 0.0.0.0 --port 8080 --db goonclient.db
 Testen:    python3 server.py --insecure   (KEIN Mojang-Login, nur für lokale Tests!)
 Für das Internet unbedingt hinter HTTPS betreiben (z.B. nginx/Caddy als Reverse-Proxy, dann --trust-proxy).
 
+Daten behalten ohne dauerhafte Festplatte (z.B. Render Free): Umgebungsvariablen GOON_BACKUP_REPO ("name/repo", muss PRIVAT sein)
+und GOON_BACKUP_TOKEN setzen. Dann wird die Datenbank alle 2 Minuten und beim Beenden gesichert und beim Start zurückgeholt (Klasse DbBackup).
+
 Schnittstelle (alles JSON):
-  GET  /v1/health
+  GET  /v1/health                              -> {"ok", "backup": {"state": "off"|"ok"|"failing"|"blocked", "lastUpload"}}
   POST /v1/auth/challenge                      -> {"serverId": "..."}
   POST /v1/auth/verify   {"username","serverId"} -> {"token","uuid","expiresIn"}
   PUT  /v1/cosmetics     (Authorization: Bearer <token>) Body: Cosmetics-Objekt
   GET  /v1/cosmetics?uuids=<uuid>,<uuid>,...   (höchstens 100) -> {"players": {"<uuid>": Cosmetics-Objekt}, "active": ["<uuid>", ...]}
        ("active" = hat in den letzten 15 Minuten hochgeladen, spielt also gerade mit GoonClient)
   POST /v1/redeem/code   (Authorization: Bearer <token>) {"code": "<eingetippter Code>"} -> 200 {"ok", "id", "coins"},
-                         400 ungültig, 409 schon eingelöst, 410 abgelaufen/aufgebraucht. Codes stehen in codes.json (add_code.py).
+                         400 ungültig, 409 schon eingelöst, 410 abgelaufen/aufgebraucht. Codes stehen in codes.json (add_code.py) und gelten höchstens 7 Tage.
   POST /v1/redeem        (alt, Client 3.8-3.9) {"id": "<code-id>"} -> 200 {"ok": true} oder 409 (schon eingelöst)
   Freunde (alle mit Authorization: Bearer <token>):
   GET  /v1/friends                         -> {"incoming": [...], "outgoing": [...], "friends": [...]}
@@ -33,6 +36,16 @@ Schnittstelle (alles JSON):
   POST /v1/friends/remove   {"uuid"}       -> {"status": "removed"}
   PUT  /v1/stats            {"coins", "earned", "playSeconds", "owned": [item-ids]}
   GET  /v1/friends/profile?uuid=<uuid>     -> Stats + Cosmetics, nur für bestätigte Freunde (sonst 403)
+  Chat (ab Client 3.83.0; nur zwischen bestätigten Freunden, der Absender kommt immer aus dem Token):
+  GET  /v1/chat/poll?boot=&since=&wait=    -> Live-Kanal per Long-Polling: {"boot","seq","resync","events":[...]}
+  GET  /v1/chat/sync                       -> alle noch nicht zugestellten Nachrichten an mich
+  GET  /v1/chat/state                      -> Freunde mit Status, Ungelesen-Zahl und letzter Nachricht, blockierte Spieler
+  GET  /v1/chat/history?with=&before=&limit= -> Verlauf mit einem Freund, neueste zuerst
+  POST /v1/chat/send      {"to","text"|"sticker","cid"} -> die gespeicherte Nachricht
+  POST /v1/chat/read      {"with","upto"}   POST /v1/chat/delete {"id"}   POST /v1/chat/typing {"to"}
+  POST /v1/chat/presence  {"mode": "online"|"away"|"hidden"}
+  POST /v1/chat/block     {"uuid","blocked"}   POST /v1/chat/report {"with","id"}
+  GET  /v1/admin/reports  (Authorization: Bearer <GOON_ADMIN_TOKEN>) -> Meldungen; ohne gesetztes Token gibt es den Endpunkt nicht
   Website (Ordner site/ neben server.py):
   GET  /                                   -> die Website (site/index.html)
   GET  /download                           -> die neueste Client-JAR aus site/downloads/
@@ -48,12 +61,15 @@ Schnittstelle (alles JSON):
                                               ohne Anmeldung, neue Termine ohne neue Client-Version)
 """
 import argparse
+import gzip
 import hashlib
 import json
 import os
 import re
 import secrets
+import signal
 import sqlite3
+import sys
 import threading
 import time
 import urllib.error
@@ -164,6 +180,15 @@ def clean_aura_style(value):
 
 ITEM_RE = re.compile(r"^[a-z]+\.[a-z0-9_]{1,24}$")
 MAX_PENDING_REQUESTS = 200
+MAX_FRIENDS = 100
+MAX_REQUESTS_PER_DAY = 20
+CHAT_MAX_TEXT = 300
+CHAT_KEEP_PER_CONVERSATION = 200
+CHAT_TTL_DEFAULT = 7 * 86400
+REPORT_MESSAGES = 20
+REPORT_TTL = 90 * 86400
+STICKER_RE = re.compile(r"[a-z0-9_.]{1,40}")
+CID_RE = re.compile(r"[A-Za-z0-9_-]{1,40}")
 MAX_OPEN_GIFTS = 50
 MAX_GIFT_COINS = 10000
 GIFT_ID_RE = re.compile(r"^[0-9a-f]{16,32}$")
@@ -193,6 +218,14 @@ def norm_uuid(text):
     return str(uuidlib.UUID(text))
 
 
+BACKUP_TAG = "goon-backup"
+BACKUP_INTERVAL_DEFAULT = 120.0
+BACKUP_TIMEOUT = 30
+BACKUP_START_TRIES = 5
+BACKUP_RETRY_SECONDS = 2
+BACKUP_KEEP_LATEST = 3
+BACKUP_KEEP_DAYS = 3
+
 class Store:
     def __init__(self, path):
         self.lock = threading.Lock()
@@ -211,7 +244,17 @@ class Store:
         # Geschenke (ab Client 3.48.0): Id kommt vom Sender, damit er nach einem Datenverlust erneut schicken kann
         self.db.execute("CREATE TABLE IF NOT EXISTS gifts (id TEXT PRIMARY KEY, src TEXT NOT NULL, dst TEXT NOT NULL, "
                         "coins INTEGER NOT NULL, item TEXT NOT NULL, at REAL NOT NULL, claimed REAL)")
+        # Chat (ab Client 3.83.0). Wer die Datenbank wechseln will, muss nur die Methoden unter "Chat" neu schreiben.
+        self.db.execute("CREATE TABLE IF NOT EXISTS blocks (src TEXT NOT NULL, dst TEXT NOT NULL, at REAL NOT NULL, PRIMARY KEY (src, dst))")
+        self.db.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, src TEXT NOT NULL, dst TEXT NOT NULL, "
+                        "text TEXT NOT NULL, sticker TEXT NOT NULL, cid TEXT NOT NULL, at REAL NOT NULL, delivered REAL, seen REAL)")
+        self.db.execute("CREATE INDEX IF NOT EXISTS messages_pair ON messages (src, dst, id)")
+        self.db.execute("CREATE UNIQUE INDEX IF NOT EXISTS messages_cid ON messages (src, cid)")
+        self.db.execute("CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter TEXT NOT NULL, reported TEXT NOT NULL, "
+                        "message INTEGER NOT NULL, at REAL NOT NULL, excerpt TEXT NOT NULL)")
         self.db.commit()
+        self.chat_ttl = CHAT_TTL_DEFAULT
+        self.last_chat_purge = 0.0
         self.purge()
 
     def purge(self):
@@ -265,7 +308,11 @@ class Store:
         with self.lock:
             if self.db.execute("SELECT 1 FROM friendships WHERE a=? AND b=?", (a, b)).fetchone():
                 return "friends"
+            if self._blocked(src, dst):
+                return "blocked"  # man hat ihn selbst blockiert: erst aufheben
             if self.db.execute("SELECT 1 FROM friend_requests WHERE src=? AND dst=?", (dst, src)).fetchone():
+                if self._friend_count(src) >= MAX_FRIENDS or self._friend_count(dst) >= MAX_FRIENDS:
+                    return "full"
                 self._befriend(src, dst)
                 self.db.commit()
                 return "friends"
@@ -282,6 +329,8 @@ class Store:
             if not self.db.execute("SELECT 1 FROM friend_requests WHERE src=? AND dst=?", (other, me)).fetchone():
                 return None
             if accept:
+                if self._friend_count(me) >= MAX_FRIENDS or self._friend_count(other) >= MAX_FRIENDS:
+                    return "full"
                 self._befriend(me, other)
             else:
                 self.db.execute("DELETE FROM friend_requests WHERE src=? AND dst=?", (other, me))
@@ -293,12 +342,15 @@ class Store:
         with self.lock:
             self.db.execute("DELETE FROM friendships WHERE a=? AND b=?", (a, b))
             self.db.execute("DELETE FROM friend_requests WHERE (src=? AND dst=?) OR (src=? AND dst=?)", (me, other, other, me))
+            # Der Chat endet für beide: Die Nachrichten verschwinden auch vom Server
+            self.db.execute("DELETE FROM messages WHERE (src=? AND dst=?) OR (src=? AND dst=?)", (me, other, other, me))
             self.db.commit()
 
     def friends_overview(self, me):
         with self.lock:
             incoming = [{"uuid": r[0], "name": self._name(r[0]), "at": int(r[1] * 1000)} for r in
-                        self.db.execute("SELECT src, at FROM friend_requests WHERE dst=? ORDER BY at", (me,)).fetchall()]
+                        self.db.execute("SELECT src, at FROM friend_requests WHERE dst=? AND src NOT IN "
+                                        "(SELECT dst FROM blocks WHERE src=?) ORDER BY at", (me, me)).fetchall()]
             outgoing = [{"uuid": r[0], "name": self._name(r[0])} for r in
                         self.db.execute("SELECT dst FROM friend_requests WHERE src=?", (me,)).fetchall()]
             friends = []
@@ -306,6 +358,140 @@ class Store:
                 other = b if a == me else a
                 friends.append({"uuid": other, "name": self._name(other), "since": int(since * 1000)})
         return {"incoming": incoming, "outgoing": outgoing, "friends": friends}
+
+    # ---------- Chat ----------
+
+    def _blocked(self, src, dst):
+        return self.db.execute("SELECT 1 FROM blocks WHERE src=? AND dst=?", (src, dst)).fetchone() is not None
+
+    def _friend_count(self, uid):
+        return self.db.execute("SELECT COUNT(*) FROM friendships WHERE a=? OR b=?", (uid, uid)).fetchone()[0]
+
+    @staticmethod
+    def _message_json(r):
+        status = "read" if r[8] else "delivered" if r[7] else "sent"
+        return {"id": r[0], "from": r[1], "to": r[2], "text": r[3], "sticker": r[4], "cid": r[5], "at": int(r[6] * 1000), "status": status}
+
+    _COLS = "id, src, dst, text, sticker, cid, at, delivered, seen"
+
+    def purge_chat(self, force=False):
+        """Löscht Nachrichten nach Ablauf der Frist. Läuft höchstens alle paar Sekunden, die Frist gilt beim Lesen trotzdem genau."""
+        now = time.time()
+        if not force and now - self.last_chat_purge < min(60.0, self.chat_ttl / 2.0):
+            return
+        self.last_chat_purge = now
+        with self.lock:
+            self.db.execute("DELETE FROM messages WHERE at < ?", (now - self.chat_ttl,))
+            self.db.execute("DELETE FROM reports WHERE at < ?", (now - REPORT_TTL,))
+            self.db.commit()
+
+    def send_message(self, src, dst, text, sticker, cid):
+        """Speichert eine Nachricht. Gibt (Nachricht, neu?) zurück; dieselbe cid desselben Absenders ergibt keine zweite Nachricht."""
+        now = time.time()
+        with self.lock:
+            row = self.db.execute("SELECT " + self._COLS + " FROM messages WHERE src=? AND cid=?", (src, cid)).fetchone()
+            if row:
+                return self._message_json(row), False
+            cur = self.db.execute("INSERT INTO messages(src, dst, text, sticker, cid, at) VALUES(?,?,?,?,?,?)", (src, dst, text, sticker, cid, now))
+            mid = cur.lastrowid
+            # Höchstens 200 Nachrichten pro Unterhaltung
+            self.db.execute("DELETE FROM messages WHERE id IN (SELECT id FROM messages WHERE (src=? AND dst=?) OR (src=? AND dst=?) "
+                            "ORDER BY id DESC LIMIT -1 OFFSET ?)", (src, dst, dst, src, CHAT_KEEP_PER_CONVERSATION))
+            self.db.commit()
+            row = self.db.execute("SELECT " + self._COLS + " FROM messages WHERE id=?", (mid,)).fetchone()
+            return self._message_json(row), True
+
+    def history(self, me, other, before, limit):
+        since = time.time() - self.chat_ttl
+        with self.lock:
+            rows = self.db.execute("SELECT " + self._COLS + " FROM messages WHERE ((src=? AND dst=?) OR (src=? AND dst=?)) AND id<? AND at>=? "
+                                   "ORDER BY id DESC LIMIT ?", (me, other, other, me, before, since, limit)).fetchall()
+        return [self._message_json(r) for r in rows]
+
+    def take_undelivered(self, me):
+        """Alle noch nicht zugestellten Nachrichten an mich; sie gelten danach als zugestellt."""
+        now = time.time()
+        with self.lock:
+            rows = self.db.execute("SELECT " + self._COLS + " FROM messages WHERE dst=? AND delivered IS NULL AND at>=? ORDER BY id",
+                                   (me, now - self.chat_ttl)).fetchall()
+            self.db.execute("UPDATE messages SET delivered=? WHERE dst=? AND delivered IS NULL", (now, me))
+            self.db.commit()
+        return [self._message_json(r) for r in rows]
+
+    def mark_delivered(self, me, ids):
+        """Nachrichten aus dem Live-Kanal sind angekommen. Gibt [(Absender, Id)] der wirklich neu zugestellten zurück."""
+        out = []
+        now = time.time()
+        with self.lock:
+            for mid in ids:
+                row = self.db.execute("SELECT src FROM messages WHERE id=? AND dst=? AND delivered IS NULL", (mid, me)).fetchone()
+                if row:
+                    self.db.execute("UPDATE messages SET delivered=? WHERE id=?", (now, mid))
+                    out.append((row[0], mid))
+            self.db.commit()
+        return out
+
+    def mark_read(self, me, other, upto):
+        now = time.time()
+        with self.lock:
+            cur = self.db.execute("UPDATE messages SET seen=?, delivered=COALESCE(delivered, ?) WHERE src=? AND dst=? AND id<=? AND seen IS NULL",
+                                  (now, now, other, me, upto))
+            self.db.commit()
+            return cur.rowcount
+
+    def delete_message(self, me, mid):
+        """Löscht eine eigene Nachricht. Gibt den Empfänger zurück, None, wenn es keine eigene Nachricht ist."""
+        with self.lock:
+            row = self.db.execute("SELECT dst FROM messages WHERE id=? AND src=?", (mid, me)).fetchone()
+            if not row:
+                return None
+            self.db.execute("DELETE FROM messages WHERE id=?", (mid,))
+            self.db.commit()
+            return row[0]
+
+    def set_block(self, me, other, blocked):
+        a, b = sorted((me, other))
+        with self.lock:
+            if blocked:
+                self.db.execute("INSERT OR IGNORE INTO blocks(src, dst, at) VALUES(?,?,?)", (me, other, time.time()))
+                self.db.execute("DELETE FROM friendships WHERE a=? AND b=?", (a, b))
+                self.db.execute("DELETE FROM friend_requests WHERE (src=? AND dst=?) OR (src=? AND dst=?)", (me, other, other, me))
+                self.db.execute("DELETE FROM messages WHERE (src=? AND dst=?) OR (src=? AND dst=?)", (me, other, other, me))
+            else:
+                self.db.execute("DELETE FROM blocks WHERE src=? AND dst=?", (me, other))
+            self.db.commit()
+
+    def chat_state(self, me):
+        since = time.time() - self.chat_ttl
+        friends = []
+        with self.lock:
+            for a, b, _ in self.db.execute("SELECT a, b, since FROM friendships WHERE a=? OR b=?", (me, me)).fetchall():
+                other = b if a == me else a
+                unread = self.db.execute("SELECT COUNT(*) FROM messages WHERE src=? AND dst=? AND seen IS NULL AND at>=?", (other, me, since)).fetchone()[0]
+                last = self.db.execute("SELECT id, at FROM messages WHERE ((src=? AND dst=?) OR (src=? AND dst=?)) AND at>=? ORDER BY id DESC LIMIT 1",
+                                       (me, other, other, me, since)).fetchone()
+                friends.append({"uuid": other, "name": self._name(other), "unread": unread,
+                                "lastId": last[0] if last else 0, "lastAt": int(last[1] * 1000) if last else 0})
+            blocked = [{"uuid": r[0], "name": self._name(r[0])} for r in self.db.execute("SELECT dst FROM blocks WHERE src=?", (me,)).fetchall()]
+        return {"friends": friends, "blocked": blocked, "maxFriends": MAX_FRIENDS}
+
+    def add_report(self, reporter, reported, mid):
+        """Speichert die letzten Nachrichten der Unterhaltung als Meldung. Gibt die Id der Meldung zurück."""
+        now = time.time()
+        with self.lock:
+            rows = self.db.execute("SELECT " + self._COLS + " FROM messages WHERE (src=? AND dst=?) OR (src=? AND dst=?) ORDER BY id DESC LIMIT ?",
+                                   (reporter, reported, reported, reporter, REPORT_MESSAGES)).fetchall()
+            excerpt = [self._message_json(r) for r in reversed(rows)]
+            cur = self.db.execute("INSERT INTO reports(reporter, reported, message, at, excerpt) VALUES(?,?,?,?,?)",
+                                  (reporter, reported, mid, now, json.dumps(excerpt)))
+            self.db.commit()
+            return cur.lastrowid
+
+    def list_reports(self, limit):
+        with self.lock:
+            rows = self.db.execute("SELECT id, reporter, reported, message, at, excerpt FROM reports ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+            return [{"id": r[0], "reporter": r[1], "reporterName": self._name(r[1]), "reported": r[2], "reportedName": self._name(r[2]),
+                     "message": r[3], "at": int(r[4] * 1000), "excerpt": json.loads(r[5])} for r in rows]
 
     # ---------- Geschenke ----------
 
@@ -392,12 +578,16 @@ def hash_code(normalized):
     return hashlib.sha256((CODE_SALT + normalized).encode("utf-8")).hexdigest()
 
 
+CODE_DAYS = 7
+CODE_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
 class Codes:
     """
     Einlösbare Goon-Coins-Codes aus codes.json (nur Hashes, der Klartext steht nirgends). Die Datei wird bei jeder Abfrage
     auf Änderungen geprüft; neue Codes gelten also sofort, ohne Neustart und ohne neue Client-Version.
     Eintrag: {"id": "bonus3000", "hash": "<sha256>", "coins": 3000, "maxUses": 50, "expires": "2026-12-31"}
-    (maxUses = höchstens so viele Spieler insgesamt, expires = letzter gültiger Tag; beide optional).
+    (maxUses = höchstens so viele Spieler insgesamt, optional; expires = letzter gültiger Tag, Pflicht, siehe code_expired).
     Mit "item": "accessory.hackerorbit" gibt der Code zusätzlich ein exklusives Item (dann darf "coins" 0 sein).
     Clients vor 3.56.0 kennen keine Items: für sie gilt ein Item-Code nicht (426), damit niemand den Code ohne Item verbraucht.
     Mit "eventCoins": 500, "eventCurrency": "halloween" gibt der Code zusätzlich Event-Coins. Das können erst Clients ab 3.76.0, ältere bekommen ebenfalls 426.
@@ -464,6 +654,15 @@ class Codes:
         with self.lock:
             self._reload()
             return self.by_hash.get(hash_code(normalized))
+
+    def find_id(self, cid):
+        """Eintrag zu einer Code-Id (alter Einlöse-Weg), oder None."""
+        with self.lock:
+            self._reload()
+            for e in self.by_hash.values():
+                if e["id"] == cid:
+                    return e
+        return None
 
 
 class Site:
@@ -714,14 +913,18 @@ def clean_event(e):
             "endLabel": label, "coinsPerMinute": cpm, "color": color, "theme": theme, "items": list(dict.fromkeys(items))[:64]}
 
 
-def code_expired(entry):
+def code_expired(entry, now=None):
+    """
+    Codes laufen spätestens nach CODE_DAYS Tagen ab. Die Datei speichert nur den letzten gültigen Tag (UTC): Fehlt er, ist er
+    ungültig oder liegt er weiter als CODE_DAYS Tage in der Zukunft, gilt der Code als abgelaufen. So kann kein Code länger leben.
+    """
+    now = time.time() if now is None else now
     exp = entry.get("expires")
-    if not exp:
-        return False
-    try:
-        return time.strftime("%Y-%m-%d", time.gmtime()) > exp
-    except (TypeError, ValueError):
-        return False
+    if not isinstance(exp, str) or not CODE_DATE_RE.fullmatch(exp):
+        return True
+    today = time.strftime("%Y-%m-%d", time.gmtime(now))
+    latest = time.strftime("%Y-%m-%d", time.gmtime(now + CODE_DAYS * 86400))
+    return today > exp or exp > latest
 
 
 # Alte Ids (laugh, heart, cry, celebrate) bleiben erlaubt, damit ältere Clients nicht abgewiesen werden
@@ -789,10 +992,359 @@ class RateLimiter:
             return True
 
 
+class ChatHub:
+    """
+    Der Live-Kanal: Je Spieler eine kurze Warteschlange im Speicher, aus der sein Long-Poll liest. Geht sie verloren (Neustart,
+    neue boot-Id) oder ist sie übergelaufen, holt der Client den Stand über /v1/chat/sync nach; die Nachrichten liegen in der Datenbank.
+    Long-Polling statt WebSocket, weil es ohne Zusatzpakete mit der Standardbibliothek läuft und jeder Proxy es durchlässt.
+    """
+
+    QUEUE = 300
+    MAX_WAITING = 800
+    ONLINE_SECONDS = 45.0
+
+    def __init__(self):
+        self.cond = threading.Condition()
+        self.boot = secrets.token_hex(6)
+        self.seq = 0
+        self.queues = {}
+        self.first = {}
+        self.waiting = 0
+        self.last_seen = {}
+        self.modes = {}
+
+    def publish(self, uid, event):
+        with self.cond:
+            self.seq += 1
+            q = self.queues.setdefault(uid, [])
+            q.append((self.seq, event))
+            if len(q) > self.QUEUE:
+                del q[0]
+                self.first[uid] = q[0][0]
+            self.cond.notify_all()
+
+    def wait(self, uid, boot, since, timeout):
+        """Wartet höchstens timeout Sekunden auf Neues. Gibt (seq, resync, events) zurück, None, wenn zu viele warten."""
+        deadline = time.time() + timeout
+        with self.cond:
+            self.last_seen[uid] = time.time()
+            if boot != self.boot or since < self.first.get(uid, 0) - 1:
+                return self.seq, True, []
+            if self.waiting >= self.MAX_WAITING:
+                return None
+            self.waiting += 1
+            try:
+                while True:
+                    q = self.queues.get(uid, [])
+                    fresh = [e for s, e in q if s > since]
+                    if fresh:
+                        self.queues[uid] = [(s, e) for s, e in q if s > since]
+                        return self.seq, False, fresh
+                    left = deadline - time.time()
+                    if left <= 0:
+                        return self.seq, False, []
+                    self.cond.wait(left)
+            finally:
+                self.waiting -= 1
+                self.last_seen[uid] = time.time()
+
+    def set_mode(self, uid, mode):
+        with self.cond:
+            self.modes[uid] = mode
+            self.last_seen[uid] = time.time()
+
+    def presence(self, uid):
+        """online, away oder offline. Wer "hidden" gewählt hat, wirkt offline."""
+        with self.cond:
+            if time.time() - self.last_seen.get(uid, 0) > self.ONLINE_SECONDS:
+                return "offline"
+            mode = self.modes.get(uid, "online")
+        return "offline" if mode == "hidden" else mode
+
+
+class BackupUnreachable(Exception):
+    """Die Sicherung ist gerade nicht erreichbar (Netz, GitHub-Störung): später noch einmal versuchen."""
+
+
+class AccessDenied(Exception):
+    """Token oder Repo stimmen nicht: Warten hilft nicht, die Einstellungen müssen geändert werden."""
+
+
+class NoAuthOnRedirect(urllib.request.HTTPRedirectHandler):
+    """Weiterleitungen nicht folgen: Der Download-Host darf das Token nie sehen, er wird von Hand ohne Token geladen."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def backups_to_keep(names):
+    """
+    Welche Sicherungen bleiben: die neuesten 3 und die neueste jedes der letzten 3 Tage, an denen es welche gab.
+    Der Dateiname enthält die Zeit (UTC), neuere Namen sortieren also weiter hinten.
+    """
+    ordered = sorted(names, reverse=True)
+    keep = set(ordered[:BACKUP_KEEP_LATEST])
+    days = []
+    for name in ordered:
+        day = name[5:13]  # goon-YYYYMMDD-...
+        if day not in days:
+            days.append(day)
+            if len(days) <= BACKUP_KEEP_DAYS:
+                keep.add(name)
+    return keep
+
+
+class DbBackup:
+    """
+    Sichert die Datenbank als gzip-Datei in den Release "goon-backup" eines PRIVATEN GitHub-Repos und holt sie beim Start zurück.
+    So überlebt alles einen Deploy oder Neustart auf einem Hoster ohne dauerhafte Festplatte (Render Free): Freunde, Chats,
+    Blocklisten, Meldungen, Cosmetics und eingelöste Codes.
+
+    Oberste Regel: Eine gute Sicherung wird nie durch eine leere Datenbank ersetzt. Deshalb gilt:
+    - Ist GitHub nicht erreichbar, beendet sich der Server beim Start (der Hoster startet ihn neu), statt leer loszulaufen.
+    - Sind Token oder Repo falsch, läuft er weiter, damit die Website erreichbar bleibt, lädt aber nichts hoch.
+      Eine Merkdatei sorgt dafür, dass die dabei entstandene leere Datenbank auch nach einem Neustart nicht als gut gilt.
+    Das Token wird nie geloggt und nie an einen anderen Host geschickt.
+    """
+
+    def __init__(self, path, repo, token, api, interval):
+        self.path = path
+        self.repo = repo
+        self.token = token
+        self.api = api.rstrip("/")
+        self.interval = interval
+        self.state = "off" if not (repo and token) else "starting"
+        self.may_upload = False
+        self.last_hash = None
+        self.last_ok = 0
+        self.lock = threading.Lock()
+        self.stop_event = threading.Event()
+        self.opener = urllib.request.build_opener(NoAuthOnRedirect())
+        self.marker = path + ".restore-failed"
+
+    # ---------- HTTP ----------
+
+    def _request(self, method, url, body=None, content_type="application/json", accept="application/vnd.github+json", auth=True):
+        req = urllib.request.Request(url, data=body, method=method)
+        req.add_header("User-Agent", "GoonClient-Backend")
+        req.add_header("Accept", accept)
+        req.add_header("X-GitHub-Api-Version", "2022-11-28")
+        if auth:
+            req.add_header("Authorization", "Bearer " + self.token)
+        if body is not None:
+            req.add_header("Content-Type", content_type)
+        try:
+            with self.opener.open(req, timeout=BACKUP_TIMEOUT) as resp:
+                return resp.status, resp.read(), resp.headers
+        except urllib.error.HTTPError as e:
+            data = e.read()
+            return e.code, data, e.headers
+        except OSError as e:
+            raise BackupUnreachable(type(e).__name__)
+
+    def _json(self, method, path, body=None):
+        raw = None if body is None else json.dumps(body).encode("utf-8")
+        status, data, _ = self._request(method, self.api + path, raw)
+        if status >= 500 or status == 429:
+            raise BackupUnreachable("HTTP %d" % status)
+        try:
+            return status, json.loads(data) if data else {}
+        except ValueError:
+            raise BackupUnreachable("bad answer")
+
+    def _release(self):
+        """Der Sicherungs-Release, None = noch keiner."""
+        status, data = self._json("GET", "/repos/%s/releases/tags/%s" % (self.repo, BACKUP_TAG))
+        if status == 200:
+            return data
+        if status == 404:
+            return None
+        if status in (401, 403):
+            raise AccessDenied("HTTP %d" % status)
+        raise BackupUnreachable("HTTP %d" % status)
+
+    def _download(self, asset_id):
+        status, data, headers = self._request("GET", self.api + "/repos/%s/releases/assets/%s" % (self.repo, asset_id), accept="application/octet-stream")
+        if status in (301, 302, 303, 307, 308):
+            status, data, _ = self._request("GET", headers.get("Location", ""), accept="application/octet-stream", auth=False)
+        if status != 200:
+            raise BackupUnreachable("HTTP %d" % status)
+        return data
+
+    # ---------- Zurückholen ----------
+
+    def restore(self):
+        """Beim Start, bevor die Datenbank geöffnet wird."""
+        if self.state == "off":
+            print("Backup: OFF (GOON_BACKUP_REPO and GOON_BACKUP_TOKEN not set). Without a lasting disk all data is lost on restart.", flush=True)
+            return
+        for attempt in range(BACKUP_START_TRIES):
+            try:
+                self._restore_once()
+                return
+            except AccessDenied as e:
+                # Warten hilft hier nicht. Die Website soll laufen, aber es wird nichts hochgeladen.
+                self.state = "blocked"
+                if not (os.path.exists(self.path) and os.path.getsize(self.path) > 0):
+                    # Nur eine jetzt entstehende leere Datenbank ist verdächtig, vorhandene Daten auf einer Festplatte nicht
+                    with open(self.marker, "w", encoding="utf-8") as f:
+                        f.write("restore failed\n")
+                print("Backup: NOT WORKING (%s). Check GOON_BACKUP_TOKEN and GOON_BACKUP_REPO. Running with an empty database, uploads are off so the saved backup stays safe." % e, flush=True)
+                return
+            except BackupUnreachable as e:
+                print("Backup: could not reach GitHub (%s), try %d of %d" % (e, attempt + 1, BACKUP_START_TRIES), flush=True)
+                if attempt + 1 < BACKUP_START_TRIES:
+                    time.sleep(min(10, BACKUP_RETRY_SECONDS * (attempt + 1)))
+        print("Backup: giving up for now. Exiting instead of starting empty; the host will start the server again.", flush=True)
+        sys.exit(1)
+
+    def _restore_once(self):
+        status, info = self._json("GET", "/repos/%s" % self.repo)
+        if status in (401, 403, 404):
+            raise AccessDenied("no access to the repo, HTTP %d" % status)
+        if status != 200:
+            raise BackupUnreachable("HTTP %d" % status)
+        if info.get("private") is not True:
+            raise AccessDenied("the repo is PUBLIC, chats must not go there; make it private")
+        untrusted = os.path.exists(self.marker)
+        if os.path.exists(self.path) and os.path.getsize(self.path) > 0 and not untrusted:
+            # Dauerhafte Festplatte oder einfacher Neustart: Die Datei hier ist der neueste Stand
+            print("Backup: keeping the existing database %s" % self.path, flush=True)
+            self.state = "ok"
+            self.may_upload = True
+            return
+        release = self._release()
+        assets = sorted((release or {}).get("assets", []), key=lambda a: a.get("name", ""), reverse=True)
+        assets = [a for a in assets if a.get("name", "").startswith("goon-")]
+        if not assets:
+            print("Backup: no backup saved yet, starting fresh", flush=True)
+            self._finish_restore()
+            return
+        for asset in assets:
+            tmp = self.path + ".restoring"
+            try:
+                raw = gzip.decompress(self._download(asset["id"]))
+                with open(tmp, "wb") as f:
+                    f.write(raw)
+                self._verify(tmp)
+            except (OSError, EOFError, sqlite3.Error, ValueError) as e:
+                print("Backup: %s is damaged (%s), trying the one before" % (asset.get("name"), type(e).__name__), flush=True)
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+                continue
+            for leftover in (self.path + "-wal", self.path + "-shm", self.path + "-journal"):
+                if os.path.exists(leftover):
+                    os.remove(leftover)
+            os.replace(tmp, self.path)
+            print("Backup: restored %s (%d KB)" % (asset.get("name"), len(raw) // 1024), flush=True)
+            self.last_hash = hashlib.sha256(raw).hexdigest()
+            self._finish_restore()
+            return
+        raise AccessDenied("every saved backup is damaged, look at the release in the repo")
+
+    def _finish_restore(self):
+        if os.path.exists(self.marker):
+            os.remove(self.marker)
+        self.state = "ok"
+        self.may_upload = True
+
+    @staticmethod
+    def _verify(path):
+        db = sqlite3.connect(path)
+        try:
+            row = db.execute("PRAGMA integrity_check").fetchone()
+            if not row or row[0] != "ok":
+                raise ValueError("integrity")
+            db.execute("SELECT COUNT(*) FROM sqlite_master").fetchone()
+        finally:
+            db.close()
+
+    # ---------- Sichern ----------
+
+    def start(self):
+        if self.may_upload:
+            threading.Thread(target=self._loop, name="db-backup", daemon=True).start()
+
+    def _loop(self):
+        while not self.stop_event.wait(self.interval):
+            self.upload_now()
+
+    def upload_now(self):
+        """Lädt den Stand hoch, wenn er sich geändert hat. Fehler werden beim nächsten Durchlauf wiederholt."""
+        if not self.may_upload:
+            return False
+        with self.lock:
+            try:
+                raw = self._snapshot()
+                digest = hashlib.sha256(raw).hexdigest()
+                if digest == self.last_hash:
+                    return True
+                self._upload(gzip.compress(raw, mtime=0))
+                self.last_hash = digest
+                self.last_ok = time.time()
+                self.state = "ok"
+                return True
+            except (BackupUnreachable, AccessDenied, sqlite3.Error, OSError) as e:
+                self.state = "failing"
+                print("Backup: upload failed (%s), trying again later" % type(e).__name__, flush=True)
+                return False
+
+    def _snapshot(self):
+        """Ein stimmiger Stand der Datenbank, auch während der Server schreibt."""
+        tmp = self.path + ".snapshot"
+        src = sqlite3.connect(self.path)
+        dst = sqlite3.connect(tmp)
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+            src.close()
+        try:
+            with open(tmp, "rb") as f:
+                return f.read()
+        finally:
+            os.remove(tmp)
+
+    def _upload(self, data):
+        release = self._release()
+        if release is None:
+            status, release = self._json("POST", "/repos/%s/releases" % self.repo, {
+                "tag_name": BACKUP_TAG, "name": "GoonClient backend backup", "prerelease": True,
+                "body": "Automatic backups of the GoonClient backend database. Do not delete or make public."})
+            if status not in (200, 201):
+                # 422 kommt von GitHub, wenn das Repo noch ganz leer ist (es braucht mindestens eine Datei)
+                raise BackupUnreachable("cannot create the release, HTTP %d (the repo needs at least one file)" % status)
+        name = "goon-%s-%s.sqlite3.gz" % (time.strftime("%Y%m%d-%H%M%S", time.gmtime()), secrets.token_hex(2))
+        upload_url = release["upload_url"].split("{")[0] + "?name=" + name
+        status, _, _ = self._request("POST", upload_url, data, content_type="application/gzip")
+        if status not in (200, 201):
+            raise BackupUnreachable("upload HTTP %d" % status)
+        # Erst nach dem erfolgreichen Hochladen alte Sicherungen entfernen
+        names = {a["name"]: a["id"] for a in release.get("assets", []) if a.get("name", "").startswith("goon-")}
+        names[name] = None
+        keep = backups_to_keep(names.keys())
+        for old, asset_id in names.items():
+            if old not in keep and asset_id is not None:
+                self._request("DELETE", self.api + "/repos/%s/releases/assets/%s" % (self.repo, asset_id))
+
+    def shutdown(self):
+        """Der Hoster beendet den Server (Deploy, Neustart): letzter Stand, damit möglichst nichts fehlt."""
+        self.stop_event.set()
+        if self.upload_now():
+            print("Backup: saved before shutdown", flush=True)
+
+    def health(self):
+        return {"state": self.state, "lastUpload": int(self.last_ok)}
+
+
 class State:
     def __init__(self, args):
         self.args = args
+        self.backup = None
         self.store = Store(args.db)
+        self.store.chat_ttl = args.chat_ttl
+        self.hub = ChatHub()
+        self.admin_token = args.admin_token
         self.limiter = RateLimiter()
         self.emotes = Emotes()
         self.codes = Codes(args.codes)
@@ -987,7 +1539,7 @@ def make_handler(state):
             parsed = urllib.parse.urlparse(self.path)
             try:
                 if parsed.path == "/v1/health":
-                    return self.send_json(200, {"ok": True})
+                    return self.send_json(200, {"ok": True, "backup": state.backup.health() if state.backup else {"state": "off", "lastUpload": 0}})
                 if self.site_route(parsed.path, parsed.query):
                     return
                 if parsed.path == "/v1/cosmetics":
@@ -1020,6 +1572,10 @@ def make_handler(state):
                     if uid is None:
                         return self.error(401, "not logged in")
                     return self.send_json(200, state.store.gifts_overview(uid))
+                if parsed.path.startswith("/v1/chat/"):
+                    return self.chat_get(parsed)
+                if parsed.path == "/v1/admin/reports":
+                    return self.admin_reports(parsed)
                 if parsed.path in ("/v1/friends", "/v1/friends/profile"):
                     if not self.guard("friends", 240):
                         return
@@ -1036,8 +1592,147 @@ def make_handler(state):
             except ValueError:
                 return self.error(400, "bad request")
 
+        # ---------- Chat ----------
+
+        def chat_get(self, parsed):
+            is_poll = parsed.path == "/v1/chat/poll"
+            if not self.guard("chat_poll" if is_poll else "chat_read", 600):
+                return
+            uid = state.uuid_for(self.bearer())
+            if uid is None:
+                return self.error(401, "not logged in")
+            qs = urllib.parse.parse_qs(parsed.query)
+            state.store.purge_chat()
+            if is_poll:
+                wait = min(25.0, max(0.0, float(qs.get("wait", ["25"])[0])))
+                result = state.hub.wait(uid, qs.get("boot", [""])[0], int(qs.get("since", ["0"])[0]), wait)
+                if result is None:
+                    return self.error(503, "busy")
+                seq, resync, events = result
+                arrived = [e["message"]["id"] for e in events if e.get("type") == "message"]
+                for sender, mid in state.store.mark_delivered(uid, arrived):
+                    state.hub.publish(sender, {"type": "status", "id": mid, "status": "delivered"})
+                try:
+                    return self.send_json(200, {"boot": state.hub.boot, "seq": seq, "resync": resync, "events": events})
+                except OSError:
+                    return None  # der Client ist weg; die Nachrichten holt er beim nächsten Abgleich
+            if parsed.path == "/v1/chat/sync":
+                boot, seq = state.hub.boot, state.hub.seq
+                messages = state.store.take_undelivered(uid)
+                for m in messages:
+                    state.hub.publish(m["from"], {"type": "status", "id": m["id"], "status": "delivered"})
+                return self.send_json(200, {"boot": boot, "seq": seq, "messages": messages})
+            if parsed.path == "/v1/chat/state":
+                data = state.store.chat_state(uid)
+                for f in data["friends"]:
+                    f["presence"] = state.hub.presence(f["uuid"])
+                return self.send_json(200, data)
+            if parsed.path == "/v1/chat/history":
+                other = norm_uuid(qs.get("with", [""])[0])
+                before = int(qs.get("before", [str(1 << 62)])[0])
+                limit = min(50, max(1, int(qs.get("limit", ["30"])[0])))
+                return self.send_json(200, {"messages": state.store.history(uid, other, before, limit)})
+            return self.error(404, "not found")
+
+        def chat_post(self, parsed, body):
+            uid = state.uuid_for(self.bearer())
+            if uid is None:
+                return self.error(401, "not logged in")
+            state.store.purge_chat()
+            path = parsed.path
+            if path == "/v1/chat/send":
+                other = norm_uuid(body.get("to", ""))
+                if not state.store.are_friends(uid, other):
+                    return self.error(403, "only friends can chat")
+                text, sticker = body.get("text", ""), body.get("sticker", "")
+                cid = body.get("cid", "")
+                if not isinstance(cid, str) or not CID_RE.fullmatch(cid):
+                    return self.error(400, "bad cid")
+                if not isinstance(text, str) or not isinstance(sticker, str) or bool(text) == bool(sticker):
+                    return self.error(400, "send text or a sticker")
+                if sticker and not STICKER_RE.fullmatch(sticker):
+                    return self.error(400, "bad sticker id")
+                if text:
+                    if len(text) > CHAT_MAX_TEXT or not text.strip():
+                        return self.error(400, "text too long or empty")
+                    if any(ord(ch) < 32 or ord(ch) == 127 or 0x80 <= ord(ch) < 0xA0 or ch == "\u00a7" for ch in text):
+                        return self.error(400, "text has control characters")
+                    text = text.strip()
+                # 5 pro 5 Sekunden und 20 pro Minute je Konto (nicht je Adresse)
+                if not state.limiter.allow(uid, "chat_burst", 5, 5.0) or not state.limiter.allow(uid, "chat_minute", 20, 60.0):
+                    return self.error(429, "slow down")
+                message, fresh = state.store.send_message(uid, other, text, sticker, cid)
+                if fresh:
+                    state.hub.publish(other, {"type": "message", "message": message})
+                return self.send_json(200, message)
+            if path == "/v1/chat/read":
+                other = norm_uuid(body.get("with", ""))
+                upto = body.get("upto", 0)
+                if not isinstance(upto, int) or isinstance(upto, bool):
+                    return self.error(400, "bad id")
+                if state.store.mark_read(uid, other, upto):
+                    state.hub.publish(other, {"type": "read", "by": uid, "upto": upto})
+                return self.send_json(200, {"ok": True})
+            if path == "/v1/chat/delete":
+                mid = body.get("id")
+                if not isinstance(mid, int) or isinstance(mid, bool):
+                    return self.error(400, "bad id")
+                other = state.store.delete_message(uid, mid)
+                if other is None:
+                    return self.error(404, "not your message")
+                state.hub.publish(other, {"type": "deleted", "id": mid, "from": uid})
+                return self.send_json(200, {"ok": True})
+            if path == "/v1/chat/typing":
+                other = norm_uuid(body.get("to", ""))
+                if state.store.are_friends(uid, other) and state.limiter.allow(uid, "chat_typing", 2, 2.0):
+                    state.hub.publish(other, {"type": "typing", "from": uid})
+                return self.send_json(200, {"ok": True})
+            if path == "/v1/chat/presence":
+                mode = body.get("mode")
+                if mode not in ("online", "away", "hidden"):
+                    return self.error(400, "bad mode")
+                state.hub.set_mode(uid, mode)
+                return self.send_json(200, {"ok": True})
+            if path == "/v1/chat/block":
+                other = norm_uuid(body.get("uuid", ""))
+                if other == uid:
+                    return self.error(400, "that is you")
+                blocked = body.get("blocked") is True
+                was_friend = state.store.are_friends(uid, other)
+                state.store.set_block(uid, other, blocked)
+                if blocked and was_friend:
+                    state.hub.publish(other, {"type": "friends"})  # für den anderen sieht es aus wie ein Entfernen
+                return self.send_json(200, {"blocked": blocked})
+            if path == "/v1/chat/report":
+                other = norm_uuid(body.get("with", ""))
+                mid = body.get("id", 0)
+                if not isinstance(mid, int) or isinstance(mid, bool):
+                    return self.error(400, "bad id")
+                if not state.limiter.allow(uid, "chat_report", 10, 3600.0):
+                    return self.error(429, "slow down")
+                return self.send_json(200, {"report": state.store.add_report(uid, other, mid)})
+            return self.error(404, "not found")
+
+        def admin_reports(self, parsed):
+            """Meldungen ansehen. Ohne gesetztes GOON_ADMIN_TOKEN gibt es diesen Endpunkt nicht."""
+            if not state.admin_token:
+                return self.error(404, "not found")
+            if not self.guard("admin", 30):
+                return
+            if not secrets.compare_digest(self.bearer().encode("utf-8"), state.admin_token.encode("utf-8")):
+                return self.error(401, "bad token")
+            limit = min(200, max(1, int(urllib.parse.parse_qs(parsed.query).get("limit", ["50"])[0])))
+            return self.send_json(200, {"reports": state.store.list_reports(limit)})
+
         def do_POST(self):
             parsed = urllib.parse.urlparse(self.path)
+            if parsed.path.startswith("/v1/chat/"):
+                if not self.guard("chat_write", 600):
+                    return
+                try:
+                    return self.chat_post(parsed, self.read_json())
+                except (ValueError, json.JSONDecodeError, AttributeError):
+                    return self.error(400, "bad request")
             is_emote = parsed.path == "/v1/emote"
             is_redeem = parsed.path in ("/v1/redeem", "/v1/redeem/code")
             is_friends = parsed.path.startswith("/v1/friends/")
@@ -1056,14 +1751,26 @@ def make_handler(state):
                     if other == uid:
                         return self.error(400, "that is you")
                     if parsed.path == "/v1/friends/request":
-                        return self.send_json(200, {"status": state.store.request_friend(uid, other)})
+                        if not state.store.are_friends(uid, other) and not state.limiter.allow(uid, "friend_requests", MAX_REQUESTS_PER_DAY, 86400.0):
+                            return self.error(429, "too many friend requests today")
+                        status = state.store.request_friend(uid, other)
+                        if status == "blocked":
+                            return self.error(409, "you blocked this player")
+                        if status == "full":
+                            return self.error(409, "friend list is full")
+                        state.hub.publish(other, {"type": "friends"})
+                        return self.send_json(200, {"status": status})
                     if parsed.path == "/v1/friends/respond":
                         status = state.store.respond_friend(uid, other, body.get("accept") is True)
                         if status is None:
                             return self.error(404, "no such friend request")
+                        if status == "full":
+                            return self.error(409, "friend list is full")
+                        state.hub.publish(other, {"type": "friends"})
                         return self.send_json(200, {"status": status})
                     if parsed.path == "/v1/friends/remove":
                         state.store.remove_friend(uid, other)
+                        state.hub.publish(other, {"type": "friends"})
                         return self.send_json(200, {"status": "removed"})
                     return self.error(404, "not found")
                 if is_gift:
@@ -1122,6 +1829,9 @@ def make_handler(state):
                     code = body.get("id")
                     if not isinstance(code, str) or not re.fullmatch(r"[a-z0-9_]{1,32}", code):
                         return self.error(400, "bad code id")
+                    known = state.codes.find_id(code)
+                    if known is not None and code_expired(known):
+                        return self.error(410, "code expired")
                     if not state.store.claim(uid, code):
                         return self.error(409, "already redeemed")
                     return self.send_json(200, {"ok": True})
@@ -1194,19 +1904,39 @@ def main():
     p.add_argument("--insecure", action="store_true", help="Mojang-Prüfung abschalten (NUR für lokale Tests)")
     p.add_argument("--trust-proxy", action="store_true", help="X-Forwarded-For eines Reverse-Proxys für das Rate-Limit nutzen")
     p.add_argument("--verbose", action="store_true")
+    p.add_argument("--chat-ttl", type=float, default=float(os.environ.get("GOON_CHAT_TTL", CHAT_TTL_DEFAULT)),
+                   help="Chat-Nachrichten nach so vielen Sekunden löschen (Standard: 7 Tage)")
+    p.add_argument("--admin-token", default=os.environ.get("GOON_ADMIN_TOKEN", ""),
+                   help="Token für /v1/admin/reports (Standard: Umgebungsvariable GOON_ADMIN_TOKEN; leer = kein Abruf)")
+    p.add_argument("--backup-seconds", type=float, default=float(os.environ.get("GOON_BACKUP_SECONDS", BACKUP_INTERVAL_DEFAULT)),
+                   help="So oft die Datenbank sichern, wenn sie sich geändert hat (Standard: alle 2 Minuten)")
     args = p.parse_args()
     if os.environ.get("RENDER") and not args.trust_proxy:
         # Auf Render kommen alle Anfragen über deren Proxy: ohne X-Forwarded-For teilen sich ALLE Spieler ein Limit
         # (dann bekommt bei mehreren Spielern jeder "too many requests" und Emotes/Accessoires kommen nicht an)
         args.trust_proxy = True
+    # Das Token kommt nur aus der Umgebung: auf der Kommandozeile stünde es in Prozesslisten und Logs
+    backup = DbBackup(args.db, os.environ.get("GOON_BACKUP_REPO", "").strip(), os.environ.get("GOON_BACKUP_TOKEN", "").strip(),
+                      os.environ.get("GOON_BACKUP_API", "https://api.github.com"), args.backup_seconds)
+    backup.restore()  # vor dem Öffnen der Datenbank
     state = State(args)
+    state.backup = backup
+    backup.start()
     httpd = ThreadingHTTPServer((args.host, args.port), make_handler(state))
     httpd.daemon_threads = True
+
+    def stop(signum, frame):
+        threading.Thread(target=httpd.shutdown, daemon=True).start()
+
+    signal.signal(signal.SIGTERM, stop)
+    if hasattr(signal, "SIGBREAK"):
+        signal.signal(signal.SIGBREAK, stop)  # das Gegenstück unter Windows
     print("GoonClient backend on http://%s:%d%s" % (args.host, args.port, "  (INSECURE test mode)" if args.insecure else ""))
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
+    backup.shutdown()
 
 
 if __name__ == "__main__":

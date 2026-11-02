@@ -373,7 +373,7 @@ Codes prüft jetzt das **Backend**. Neue Codes trägst du nur noch auf dem Serve
 2. `tools/backend/codes.json` auf GitHub hochladen (die Datei im Repo ersetzen).
 3. Render deployt automatisch neu. Danach gilt der Code sofort für alle Spieler.
 
-Optionen: `--code GOON-MEIN-CODE` (eigener Code), `--max-uses 20` (nur die ersten 20 Spieler), `--expires 2026-12-31` (gültig bis einschließlich),
+Optionen: `--code GOON-MEIN-CODE` (eigener Code), `--max-uses 20` (nur die ersten 20 Spieler), `--expires 2026-11-05` (kürzer gültig, höchstens 7 Tage ab heute; ohne Angabe genau 7 Tage),
 `--list` (alle Codes anzeigen). Läuft der Server dauerhaft, liest er geänderte `codes.json` sogar ohne Neustart neu ein.
 
 ### Verhalten
@@ -456,6 +456,231 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.85.0: Weather & Time Changer
+
+Neues Modul in der Kategorie **Render**: Tageszeit und Wetter nur in der eigenen Ansicht. Es startet im Vanilla-Verhalten und verändert nichts, solange nichts eingestellt ist. Zusätzlich gibt es das HUD-Modul **Weather & Time** (Uhrzeit und Wetter, einzeln abschaltbar).
+
+### Einstellungen
+- **Zeit**: Vanilla, Fixed (Regler in Ticks mit Uhrzeit, Schnellwahl Morning, Noon, Evening, Midnight), Real time (folgt deiner Uhr, mit Verschiebung), Cycle (0,1x bis 10x, mit Pause). Mondphase Auto oder eine von acht.
+- **Wetter**: Vanilla, Clear, Rain, Thunder, Snow (auch in warmen Biomen, nur optisch), Fog. Dazu Intensity, Lightning (Off, Rare, Normal), Dim lightning flash, Thunder sound, Fog strength.
+- **Atmosphäre**: Clouds, Star brightness, Sunset glow, Sky brightness, Transition (1 bis 3 s).
+- **Fairness**: Keep game brightness. **Sky**: Use sky recommendation.
+- **Presets**: Golden Hour, Blue Hour, Eternal Night, Dawn, Storm, Snowy Evening, Foggy Morning und eigene (Name eingeben, Save, Delete). Tasten für nächstes Preset, Zeit +/-, nächstes Wetter (ab Werk nicht belegt).
+- **Vorschau** ganz oben: zeigt Zeit, Wetter und den ausgerüsteten Himmel live. Der Regler darunter probiert nur Zeiten aus und verändert die Welt nicht, "Live" geht zurück.
+- **Diagnose** ganz unten: Time hook, Weather hook, Sky link.
+
+### Zusammenspiel mit den Skys
+`com.goonclient.environment.EnvironmentState` (reines Java) ist die eine Quelle für Tageszeit, Mondphase, Regen, Gewitter, Schnee, Nebel, Wolken und Sterne. Sie kombiniert Server, Modul und Übergang.
+- Minecraft 1.21.11 berechnet Sonne, Mond, Himmelsfarben, Wolken- und Nebelfarbe über "Environment Attributes". Nur diese sichtbaren Attribute bekommen in der Client-Welt eine andere Zeit- und Wetterquelle. Davon leben der normale Himmel und die Skys gleichermaßen, sie können also nicht auseinanderlaufen. Die Skys bekommen Wetter und Atmosphäre zusätzlich über `SkyMath.atmosphere`, Horizont und Fernnebel ziehen mit.
+- Einen neuen Sky bindet man mit `.recommend(tick, wetter, stärke, "stimmung")` in `SkyCatalog` an. Ohne Eintrag gilt die Tageszeit seiner Vorschau bei klarem Wetter.
+
+### Was unberührt bleibt
+Es werden keine Pakete gesendet oder verändert. Weltzeit, Schlafen, Spawns, Pflanzen, Blitzschäden und echtes Wetter bleiben. Abfragen wie "steht der Spieler im Regen" bleiben echt, deshalb funktioniert zum Beispiel der Dreizack weiter nach dem echten Wetter. Nether und End bleiben unverändert. Blitze des Moduls entstehen nur auf deinem Client, weit entfernt und ohne Wirkung. Echte Blitze bleiben sichtbar, auch im Modus Clear.
+
+### Fairness und Verantwortung
+"Keep game brightness" ist ab Werk an: Die Welthelligkeit folgt weiter dem Server, nur Himmel und Wetter sehen anders aus. Ist sie aus, ändert sich auch die Helligkeit der Welt, und das Menü warnt. **Manche Server verbieten Zeit- oder Wetteränderungen auf dem Client, dafür bist du selbst verantwortlich.** Auch "klares Wetter" ohne die Helligkeit kann als Sichtvorteil gelten. Blitze sind ab Werk gedämpft, abschaltbar, kommen nie schnell hintereinander und klingen weich ab.
+
+### Grenzen
+- Mit "Keep game brightness" liegt am Boden das Licht der echten Zeit: Mitternachtshimmel über hellem Gras, oder klarer Himmel über dunklem Gras bei echtem Gewitter. Das ist gewollt.
+- Regen und vor allem Gewitter machen die Skys sehr dunkel, ihre Eigenheiten sind dann kaum noch zu sehen.
+- Schnee ist nur Schneefall und Himmel, am Boden liegt kein Schnee. Die Flocken sind die von Minecraft und wirken bei hoher Intensität dicht.
+- Wolken an/aus schaltet die Wolken von Minecraft hart um, die der Skys blenden weich.
+- Die Mondphase der Skys nimmt nur bei fester Wahl eine Form an; Auto zeigt dort wie bisher den vollen Mond.
+
+### Getestet
+- `tools/EnvironmentLogicTest.java`: stetige Übergänge, kürzester Weg über Mitternacht, Echtzeit, Zyklus, Wertebereiche und NaN, Kombination aus Server, Modul und Übergang, Presets, alte Konfigurationen, Empfehlungen, Dimensionen, Blitzabstände, alle Skys in allen Zeiten und Wetterlagen auf gültige Werte.
+- Im echten Spiel per Gametest: Hooks aktiv, Modul aus und auf Vanilla identisch, feste Zeit ändert Sonne, aber weder Weltzeit noch Welthelligkeit, ohne "Keep game brightness" auch die Helligkeit, echtes Gewitter bei Modus Clear, Nether unverändert, Kontaktbogen (Vanilla und 5 Skys, 4 Zeiten, 4 Wetterlagen), Nebel, Mondphasen, Menü und HUD.
+
+**Nicht getestet**: echte Server mit Plugins, Shader und andere Mods, echtes Gelände und Höhlen (nur Superflat und ein Blick in den Nether), Tastendruck und Ziehen der Regler von Hand, Geräusche (im Test nicht hörbar), Free Look und Motion Blur zusammen mit dem Modul. Der eigene Blitz wurde als Objekt und Lichtblitz gemessen, im Bild aber nicht gesehen.
+
+### Schnell im Spiel prüfen
+In einer Testwelt mit Cheats: `/time set 6000` und `/weather clear`, Modul an, Time mode **Fixed**, 18000. Der Himmel wird Nacht, `/time query daytime` zeigt weiter die echte Zeit. Dann `/weather thunder` mit Weather mode **Clear**: Der Himmel bleibt klar. Unten im Modul muss bei Time hook und Weather hook "yes" stehen.
+
+## Update 3.84.0: Coins auch AFK verdienen
+
+Goon Coins und Event-Coins laufen jetzt in jeder Welt durch, auch ohne Eingabe und mit dem Fenster im Hintergrund. Die Anzeige "AFK: paused" ist weg. Keine Coins gibt es nur außerhalb einer Welt und wenn das Spiel pausiert ist. Im Einzelspieler pausiert es beim Wechsel in ein anderes Fenster, wenn die Minecraft-Option "Pause on Lost Focus" an ist.
+
+Die 3 Minuten AFK-Erkennung (`ActivityTracker`) gilt nur noch für Missionsminuten und Battle-Pass-XP, die weiter aktives Spielen brauchen. Die Mission "Coins verdienen" zählt AFK-Coins dagegen mit, weil sie an den Coins hängt.
+
+Ältere Abschnitte dieser README, die "AFK zählt nicht" sagen, beschreiben den Stand davor.
+
+## Backend: Freunde, Chats und Blocklisten bleiben erhalten
+
+Render Free hat keine dauerhafte Festplatte: Bei jedem Deploy und jedem Aufwachen startet das Backend mit leerer Datenbank. Deshalb kann `server.py` die Datenbank jetzt automatisch in ein **privates GitHub-Repo** sichern und beim Start zurückholen. Das kostet nichts und braucht keine neuen Pakete. Der Client ist unverändert, die Version bleibt 3.83.0.
+
+**Einrichten** (Umgebungsvariablen auf Render):
+- `GOON_BACKUP_REPO`: `name/repo` eines privaten Repos mit mindestens einer Datei
+- `GOON_BACKUP_TOKEN`: ein Fine-grained Token, nur für dieses Repo, mit der Berechtigung Contents: Read and write
+- optional `GOON_BACKUP_SECONDS` (Standard 120)
+
+**Was passiert**
+- Gesichert wird die ganze Datenbank: Freunde, Chats, Blocklisten, Meldungen, Cosmetics, Stats und eingelöste Codes. Die Dateien liegen als Release `goon-backup` im Repo.
+- Alle 2 Minuten, wenn sich etwas geändert hat, und beim Beenden durch den Hoster. Es bleiben die neuesten 3 Stände und der neueste Stand der letzten 3 Tage mit Sicherungen.
+- `https://DEIN-BACKEND/v1/health` zeigt den Zustand: `ok`, `failing` (Hochladen klappt gerade nicht), `blocked` (Token oder Repo falsch, oder das Repo ist öffentlich), `off` (nicht eingerichtet).
+
+**Schutz der Sicherung**
+- Ist GitHub beim Start nicht erreichbar, beendet sich der Server und wird vom Hoster neu gestartet. Er läuft nicht leer los.
+- Bei falschem Token oder öffentlichem Repo läuft die Website weiter, aber es wird nichts hochgeladen. Spieler sehen dann leere Listen, bis das behoben und neu gestartet ist; was in dieser Zeit passiert, wird verworfen.
+- Eine beschädigte Sicherung wird erkannt, dann kommt die davor.
+
+**Grenzen**
+- Stürzt der Server ab, fehlen höchstens die letzten 2 Minuten. Render startet beim Deploy die neue Instanz, bevor die alte endet: Was in diesen Sekunden bei der alten ankommt, kann ebenfalls fehlen.
+- Der Token läuft zum gewählten Datum ab, dann steht `/v1/health` auf `blocked` beziehungsweise `failing`. Rechtzeitig erneuern.
+- Chats liegen unverschlüsselt in der Sicherung. Wer Zugriff auf das private Repo hat, also du und GitHub, könnte sie lesen. Gelöschte und abgelaufene Nachrichten können in alten Sicherungen noch bis zu 3 Tage stehen, also über die 7 Tage hinaus.
+- Bei mehreren Instanzen gleichzeitig funktioniert das nicht, eine reicht hier aber.
+
+**Getestet** mit `tools/backend/test_backup.py`: echtes `server.py` gegen einen Nachbau der GitHub-Schnittstelle (`mock_github.py`), mit Neustarts auf leerem Ordner, Absturz, falschem Token, GitHub-Störung, öffentlichem Repo und beschädigter Sicherung. **Nicht getestet**: gegen das echte GitHub und auf dem echten Render, dafür braucht es dein Token.
+
+## Update 3.83.0: Freunde-Chat (live) mit Emojis und Stickern
+
+Neuer Tab **Chat**: privater 1:1-Chat mit bestätigten Freunden, auf jedem Server und im Hauptmenü, über das GoonClient-Backend.
+
+### Benutzung
+- **Freunde**: Chatten geht nur mit Spielern, die eine Anfrage angenommen haben. Lokale Freunde ohne Verbindung stehen im Chat-Tab unter "Not connected yet" mit dem Knopf **Request**. Offene Anfragen lassen sich dort auch annehmen. Höchstens 100 verbundene Freunde (`MAX_FRIENDS`).
+- **Chat-Tab**: links Freunde mit Status und Ungelesen-Zähler, rechts der Verlauf. Enter sendet. Nach oben scrollen lädt ältere Nachrichten. Fährt man über eine Nachricht: **x** löscht die eigene für beide, **!** meldet die fremde (jeweils zweimal klicken). Oben: Mute, Clear (nur hier löschen), Report, Block.
+- **Overlay im Spiel**: Taste **O** (änderbar) öffnet den kleinen Chat. Esc schließt. Das Spiel läuft weiter.
+- **Befehle**: `/msg <freund> <text>` und `/r <text>`. Ist das Ziel kein verbundener Freund, geht der Befehl an den Server, das normale `/msg` bleibt also nutzbar. Ohne letzten Gesprächspartner geht auch `/r` an den Server.
+- **Emojis**: `:gg:`, `:goon:`, `:coin:`, `:totem:`, `:creeper:`, `:sus:` und 74 weitere. Beim Tippen von `:` erscheint eine Vervollständigung (Tab oder Enter wählt). Standard-Emojis werden beim Senden zu eigenen, was keine Entsprechung hat, wird zu `?`. Unbekannte Kürzel bleiben Text.
+- **Sticker**: Knopf neben dem Eingabefeld: Reiter pro Paket, Last (zuletzt benutzt), Favs (Stern), Suche. Übertragen wird nur die Id (`goonclassic.gg`). Unbekannte Ids erscheinen als `[Sticker]`.
+- **Pakete**: Goon Classic (14) ist frei. Minecraft Vibes (10, 120 Coins), Memes (11, 300) und Animated (9, 700) kommen als Kategorie "Stickers" in die normale Goon-Shop-Rotation. Empfänger sehen immer alle Sticker. Der Besitz wird nur im Client geprüft; das Backend prüft nur das Format, ein veränderter Client könnte also fremde Pakete senden.
+- **Einstellungen** (Knopf "Chat settings"): Banner, Sound, Do not disturb, Online-Status zeigen, Wortfilter mit eigenen Wörtern, Chat-Taste, Größe und Position des Overlays, Sticker-Animationen. Dort steht auch die Blockliste. Alte Konfigurationen laden unverändert.
+- Die Bedientexte sind Englisch wie das ganze Menü, deshalb heißt "Langsamer, bitte" im Spiel "Slow down, please."
+
+### Grenzen
+300 Zeichen pro Nachricht, keine Steuerzeichen und kein §. Links bleiben reiner Text und werden nie geladen. 20 Nachrichten pro Minute und 5 pro 5 Sekunden je Konto (Client und Backend), 20 Freundschaftsanfragen pro Tag. Das Backend hält pro Unterhaltung höchstens 200 Nachrichten und löscht sie nach 7 Tagen. Der Client hält je Unterhaltung höchstens 200 im Speicher und speichert den Verlauf nicht auf der Platte, er kommt beim Öffnen vom Backend. Keine Gruppen, öffentlichen Räume, Dateien, Standorte oder Link-Vorschauen.
+
+### Sicherheit und Datenschutz
+- Der Weg zum Backend läuft über HTTPS. **Die Nachrichten sind nicht Ende-zu-Ende-verschlüsselt: Wer das Backend betreibt, kann sie lesen.** Gespeichert werden nur UUID-Paare, Text oder Sticker-Id, Zeit und Status.
+- Der Absender kommt immer aus dem Anmelde-Token. Nachrichten lesen und schreiben können nur die beiden Beteiligten.
+- **Blockieren**: Der Blockierte kann keine Anfragen und Nachrichten mehr schicken und erfährt es nicht direkt. Für ihn sieht es aus, als wäre die Freundschaft beendet.
+- **Melden** speichert die letzten 20 Nachrichten der Unterhaltung für 90 Tage, also länger als die normalen 7 Tage.
+- Der Wortfilter wirkt beim Empfänger und ist einfach gehalten: Er erkennt nur ganze Wörter, Umschreibungen rutschen durch.
+
+### Meldungen ansehen
+Auf dem Backend die Umgebungsvariable `GOON_ADMIN_TOKEN` auf ein langes Geheimnis setzen, dann:
+```bash
+curl -H "Authorization: Bearer DEIN_TOKEN" https://DEIN-BACKEND/v1/admin/reports
+```
+Ohne gesetztes Token gibt es diese Adresse nicht (404).
+
+### Backend und Render
+Der Live-Kanal ist Long-Polling mit der Python-Standardbibliothek: **keine neuen Pakete, keine requirements.txt, kein neuer Startbefehl**. Es reicht die neue `server.py`. Sie bringt neue Tabellen mit und legt sie selbst an; die alten Endpunkte bleiben gleich, ältere Clients laufen weiter.
+- Render Free legt den Dienst nach etwa 15 Minuten ohne Anfragen schlafen, das Aufwachen dauert bis zu einer Minute. Der Client verbindet dann von selbst neu, Nachrichten kommen in dieser Zeit verzögert an. Solange jemand online ist, hält der Chat den Dienst wach, das verbraucht freie Stunden.
+- Das Dateisystem von Render Free ist nach jedem Neustart und Deploy leer: **Ohne Persistent Disk sind Nachrichten, Blocklisten und Freundschaften dann weg.** Freundschaften fragt der Client still neu an, dabei kann das Limit von 20 Anfragen pro Tag bremsen. Empfehlung: eine Persistent Disk (bezahlte Instanz) und `--db` auf einen Pfad darauf. Alle Speicherzugriffe liegen in der Klasse `Store` in `server.py`, ein Wechsel auf eine externe Datenbank betrifft nur sie.
+- `--chat-ttl` oder `GOON_CHAT_TTL` ändert die Haltezeit (Sekunden).
+
+### Sticker neu erzeugen
+Alle Bilder malt `tools/GenerateStickers.java`, nichts wird geladen. Nach einem Build im Projektordner:
+```bash
+java -cp build/classes/java/client tools/GenerateStickers.java
+```
+Das schreibt `textures/chat/emoji.png`, `textures/chat/stickers/*.png` und die Übersicht `build/chat_contact_sheet.png`.
+
+### Wie es gebaut ist
+Reine Logik ohne Minecraft in `com.goonclient.chat` (Regeln, Emoji-Parser, Zustellzustand, Rate-Limit, Verlauf, Zähler, API), Spiel-Anbindung in `com.goonclient.chat.game`. Das Netz läuft nur auf Hintergrund-Threads, bei Fehlern mit wachsendem Abstand bis 30 s und etwas Zufall. Neue Mixins gibt es nicht.
+
+### Getestet
+- `tools/ChatLogicTest.java`: Regeln, Emoji-Parser mit Randfällen, Sticker-Ids und Bilddateien, Rate-Limit, Zustand, Verlauf, Zähler.
+- `tools/backend/test_chat.py` gegen das echte Backend: Freunde, Anfragelogik (doppelt, Gegenanfrage, Block), live senden, offline, Lesebestätigung, Block, Entfernen, Rate-Limit, ungültige Ids und lange Texte, fremde Konten, Löschen nach verkürzter Haltezeit, Meldung.
+- `tools/BackendIntegrationTest.java`: der Java-Client gegen das echte Backend.
+- Im echten Spiel per Gametest mit eingespielten Daten: Chat-Tab, Emoji- und Sticker-Auswahl, Vervollständigung, Einstellungen, Overlay, Banner, `/msg` und `/r`.
+
+**Nicht getestet**: zwei echte Spieler über das echte Backend auf Render. Im Gametest ist keine Anmeldung möglich (Testkonto), die Verbindung Spiel zu Backend lief dort also nie. Beide Hälften sind einzeln geprüft, aber nicht zusammen im Spiel. Auch `/msg` auf einem Server mit eigenen Plugins und die Tastenbedienung im Overlay wurden nicht durchgespielt.
+
+## Update 3.82.0: Codes laufen nach 7 Tagen ab
+
+- **Neue Regel:** Jeder Redeem-Code gilt nur noch 7 Tage. `add_code.py` setzt den letzten gültigen Tag automatisch auf heute + 7 (UTC). Mit `--expires` geht es nur kürzer, nicht länger.
+- **Bestehende Codes:** Die Codes in `codes.json` gelten jetzt bis einschließlich 09.11.2026, auch die eingebauten Codes im Client. Nur die beiden Halloween-Codes enden wie geplant schon am 06.11.2026, zusammen mit dem Event.
+- **Sicherung im Backend:** Ein Code ohne gültiges Datum oder mit einem Datum mehr als 7 Tage in der Zukunft gilt als abgelaufen, auch wenn `codes.json` von Hand geändert wurde. Solche Codes erscheinen auch nicht auf der Website.
+- **Was bleibt:** Bereits eingelöste Coins und Items behalten die Spieler. Abgelaufene Codes verschwinden von der Website.
+- **Grenze:** Clients bis 3.81.0 kennen das Ablaufdatum ihrer eingebauten Codes (`launch100`, `bonus3000`) nicht. Ohne Online-Anmeldung lassen sie sich dort weiter lokal einlösen. Online lehnt das Backend sie ab.
+
+## Update 3.81.0: Fahrzeuge und Fantasie-Gefährte
+
+15 neue Mounts, die keine Tiere sind. Sie nutzen dieselbe Technik wie die Reittiere und kommen in die normale stündliche Rotation des Goon Shops. Kauf, Besitz und `wallet.json` funktionieren wie bei allen Items, alte Wallets laden weiter.
+
+**Fairness: Kosmetisch, ohne Spielvorteil.** Kein Tempo, kein Sprung, kein Fliegen, gleiche Hitbox, kein eigenes Server-Paket. Schwebende Mounts schweben nur optisch, der Spieler selbst fliegt nicht und bleibt, wo er ist.
+
+| Mount | Id | Seltenheit | Preis |
+|---|---|---|---|
+| Skateboard | `mount.skateboard` | Common | 30 |
+| City Bike | `mount.bicycle` | Common | 40 |
+| Wooden Sled | `mount.sled` | Common | 50 |
+| Hoverboard | `mount.hoverboard` | Uncommon | 90 |
+| Flying Carpet | `mount.carpet` | Uncommon | 110 |
+| Magic Broom | `mount.broom` | Uncommon | 130 |
+| Motorcycle | `mount.motorcycle` | Rare | 220 |
+| Retro Roadster | `mount.car` | Rare | 300 |
+| Cloud Pillow | `mount.cloud_pillow` | Rare | 380 |
+| Hover Train | `mount.hover_train` | Epic | 550 |
+| UFO | `mount.ufo` | Epic | 750 |
+| Walker Mech | `mount.mech` | Epic | 950 |
+| Starship | `mount.spaceship` | Legendary | 1600 |
+| Sky Galleon | `mount.airship` | Legendary | 2200 |
+| Sky Throne | `mount.sky_throne` | Legendary | 2900 |
+
+- **Bewegung:** Räder drehen sich passend zum Tempo. Fahrzeuge neigen sich in Kurven, nicken beim Beschleunigen und federn beim Landen. Schwebende Mounts halten einen geglätteten Bodenabstand und sinken beim Schleichen etwas ab. Fransen, Segel, Seile, Antennen und Kupplungen schwingen nach.
+- **Hover Train:** Zwei Wagen folgen der Spur des Zugkopfs. In der Vorschau fährt er eine Kurve. Dreht sich der Spieler im Stand, bleiben die Wagen stehen und knicken gegenüber dem Kopf ab.
+- **Reiter:** Eigene Sitzposen je Mount: stehen auf dem Brett, sitzen im Sattel, im Cockpit oder im Schneidersitz. Auf dem Fahrrad treten die Beine mit. Emotes laufen weich über die Reitpose.
+- **Leuchten und Effekte:** Scheinwerfer, Neon, Ringlichter und Triebwerke pulsieren sanft. Eigene Partikel je Mount, zum Beispiel Bremsfunken, Auspuffrauch, Schnee, Sternenstaub, Staub im Traktorstrahl und Plasma-Spur.
+- **Neue Einstellungen:** Lights, Trail, Sound und Sound volume, zusätzlich zu Größe, Animation, Effekten, Sichtbarkeit und Ich-Ansicht. Sie gelten für das eigene Mount, bei anderen Spielern sind Lichter und Spur immer an.
+- **Sound:** Standardmäßig aus. Es sind leise, gelegentliche Minecraft-Geräusche, kein durchgehender Motor. Sie richten sich auch nach dem Hauptschalter für GoonClient-Sounds, und Mounts anderer Spieler sind viel leiser und nur bis 16 Blöcke zu hören.
+- **Vorschau:** Auf der großen Bühne heißen die Zustände Idle, Drive, Sprint und Jump.
+- **Leistung:** Höchstens 60 Teile und 200 Quader je Mount, das größte hat zurzeit 61 Quader. Es gelten dieselben Grenzen wie bei den Reittieren: 24 Mounts gleichzeitig, 16 Partikel pro Sekunde je Mount, ab 32 Blöcken weniger Effekte, ab 64 nur noch das Modell.
+- **Sync:** Die neuen Ids laufen über das vorhandene Feld `mount`, das Backend führt keine Liste. `tools/backend/server.py` hat sich seit 3.79.0 nicht geändert. Unbekannte Ids werden still ignoriert, fremder Besitz lässt sich nicht prüfen.
+
+**Texturen neu erzeugen** (nach dem Bauen, aus dem Projektordner):
+
+```bash
+javac -encoding UTF-8 -cp build/classes/java/client -d build/tools tools/GenerateMounts.java tools/GenerateVehicleMounts.java
+```
+
+```bash
+java -cp "build/tools;build/classes/java/client" GenerateVehicleMounts
+```
+
+Der Kontaktbogen liegt danach in `build/vehicle_textures.png`.
+
+**Grenzen**
+
+- Ein Motorgeräusch als durchgehende Schleife gibt es nicht, und die Sounds sind nur technisch eingebaut, nicht angehört.
+- Die Wagen des Zugs weichen Wänden nicht aus und können durch Blöcke fahren. Auch große Modelle wie Galleone und Raumschiff ragen an Wänden in den Block.
+- Ein Namensschild für das Mount gibt es weiterhin nicht.
+- Räder im Wasser bleiben optisch an der Oberfläche, eine eigene Boot-Variante gibt es nicht.
+
+## Update 3.80.0: Reittiere komplett neu gestaltet
+
+IDs, Preise, Besitz, Sync und Einstellungen bleiben gleich, alte Wallets und Konfigurationen laden weiter. Geändert haben sich Modelle, Texturen, Sitzpose, Effekte und die Vorschau. Ein Reittier ist weiterhin rein kosmetisch.
+
+- **Modelle:** Hals in 3 Segmenten, Brust, Rumpf und Kruppe getrennt, Beine mit Oberschenkel, Knie, Fessel und Huf oder Pfote, Schweif in bis zu 5 Segmenten, Mähne in Strähnen, Unterkiefer, Nüstern, Sattel mit Gurt und teils Steigbügeln. Höchstens 60 Teile und 200 Quader je Reittier, das größte hat zurzeit 128 Quader (Drache). Mit Test abgesichert.
+- **Proportionen:** Die Rückenhöhe liegt bei 1,1 bis 1,5 Blöcken. Sitzhöhe und Reitpose gelten je Reittier: Die Hüfte rückt nach außen, die Beine liegen links und rechts am Körper.
+- **Texturen:** `tools/GenerateMounts.java` malt fünf Grundtöne plus Zwischenstufen mit Licht von oben links, dazu Fellstriche, Schuppenreihen, Federn, Rosetten, Rinde, Moos, Risse und Nähte. Kein Zufallsrauschen, gleiche Eingabe ergibt gleiche Bilder.
+- **Leuchtteile:** Eigene Maske `mount_*_e.png`, gezeichnet mit `entityTranslucentEmissive`. Sie pulsieren sanft und leuchten auch nachts.
+- **Eigene Effekte:** Staub und Gras nur im Galopp, Schneeflocken (Eisbär), Seelenfunken (Skelettpferd), Rauch und Funken am Maul sowie Flügelwind (Drache), Funken, Glut und Lava-Tropfen (Magma), Blätter und Pollen (Hirsch), Glut und Flammenfedern (Phoenix), Wolkenfetzen und Sternenstaub (Wal), Sternenstaub und Regenbogenspur (Einhorn). Der braune Sprint-Staub von Minecraft fällt beim Reiten weg.
+- **Bewegung:** Schweif, Mähne, Zügel, Quasten, Geweih, Haube und Flügelfinger schwingen verzögert nach und reagieren auf Tempo, Kurven und Federn. Sprung mit Absprung, Flugphase und Landung, Hufe rollen ab, der Reiter verlagert sein Gewicht.
+- **Boden:** Weicher Schatten, ab Rare bei einigen Reittieren ein Lichtkreis in der Farbe des Tiers, bei Legendary am stärksten.
+- **Vorschau:** Große Bühne in Shop und Inventar mit Seltenheitsrahmen, Glow bei Epic und Legendary, Effekten als Lichtpunkten, Gangarten und Drehung per Ziehen oder Regler.
+- **Leistung und Grenzen:** Höchstens 16 Partikel pro Sekunde je Reittier und 90 insgesamt, Partikel laufen über Minecrafts eigenes Partikelsystem. Ab 32 Blöcken gibt es weniger Effekte und keinen Lichtkreis, ab 64 nur noch das Modell, ab 128 nichts mehr. Höchstens 24 Reittiere gleichzeitig. Weil jedes Teil einzeln gezeichnet wird, kostet ein Reittier mehr als früher; gemessen habe ich das noch nicht.
+
+**Texturen neu erzeugen** (nach dem Bauen, aus dem Projektordner):
+
+```bash
+javac -encoding UTF-8 -cp build/classes/java/client -d build/tools tools/GenerateMounts.java
+```
+
+```bash
+java -cp "build/tools;build/classes/java/client" GenerateMounts
+```
+
+Der Kontaktbogen liegt danach in `build/mount_textures.png`.
+
+**Bekannte Schwächen**
+
+- Bei Seitenansicht verdecken die Arme des Reiters teils Hals und Kopf kleiner Tiere.
+- Die Figuren bleiben aus Quadern gebaut, Rundungen sind gestuft. Flügel und Flossen wirken von der Kante aus dünn.
+- Die Partikel der Vorschau sind einfache Lichtpunkte, im Menü gibt es keine echten Weltpartikel.
+- Die Grenzen aus 3.79.0 zu Wänden, Cape und Größe für andere Spieler gelten weiter. Lange Tiere ragen an Wänden eher in den Block.
+
 ## Update 3.79.0: Reittiere (Mounts)
 
 Neue Item-Art **Mount**: Du sitzt sichtbar im Sattel, das Reittier läuft unter dir mit. Mounts kommen wie alle anderen Items in die normale stündliche Rotation des Goon Shops, es gibt keinen eigenen Shop-Tab. Im Inventar haben sie einen eigenen Chip "Mounts".
@@ -488,8 +713,8 @@ Neue Item-Art **Mount**: Du sitzt sichtbar im Sattel, das Reittier läuft unter 
 - **Vorschau:** Im Shop und Inventar sitzt dein Spieler animiert im Sattel, mit Stand, Walk, Gallop, Jump und einem Regler zum Drehen.
 - **Einstellungen** (Inventar und Goon Cosmetics): Size, Animation, Effects, Visible to others, Show in first person, Mount key, dazu die Anzeige "Mount render active: yes/no".
 - **Sync:** Neues Feld `mount` im Backend und im Netzwerk-Paket (`cosmetics_v8`, Protokoll 8). Alte Clients ignorieren es, alte Einträge ohne das Feld gelten als "kein Reittier", unbekannte Ids werden nicht gezeichnet.
-- **Leistung:** Ab 32 Blöcken einfachere Animation ohne Partikel, ab 64 Blöcken wird nichts gezeichnet, höchstens 24 Reittiere gleichzeitig.
-- **Texturen:** Reproduzierbar mit `tools/GeneratePets.java`, die Modelle stehen in `MountModels.java`.
+- **Leistung:** Höchstens 24 Reittiere gleichzeitig. Die aktuellen Entfernungsstufen stehen bei Update 3.80.0.
+- **Texturen:** Reproduzierbar mit `tools/GenerateMounts.java`, die Modelle stehen in `MountModels.java`.
 
 **Grenzen**
 
