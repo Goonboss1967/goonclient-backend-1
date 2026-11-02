@@ -456,6 +456,37 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.89.0: Neuer Anzeigename für ein exklusives Item
+
+Ein exklusives Item trägt jetzt einen anderen Anzeigenamen. Die interne Item-Id bleibt gleich, bestehende Freischaltungen, Codes und die Anzeige bei anderen Spielern bleiben also gültig.
+
+## Update 3.88.0: Exklusive Mounts per Code
+
+Mounts können jetzt exklusiv sein: nur per Redeem-Code, nie im Goon Shop, nicht im Hourly Shop, nicht in der Wunschliste und ohne gesperrte Vorschau. Vor der Freischaltung zeigt die Oberfläche nichts davon. Nach dem Einlösen öffnet sich das Inventar mit dem vorausgewählten Item und einem kurzen Lichteffekt. Exklusive Mounts sind rein kosmetisch: Sie ändern weder Tempo noch Sprunghöhe, Flug, Hitbox oder Servermechanik und senden kein Paket an den Minecraft-Server. Schweben ist nur optisch.
+
+### Einen eigenen Code einrichten
+Das läuft über das vorhandene Code-System, im Projekt steht dafür kein Klartext. In `codes.json` landet nur ein Hash.
+1. Im Projektordner ausführen, die Item-Id steht in `ShopCatalog` beziehungsweise bei dir:
+   ```bash
+   py -3 tools/backend/add_code.py 0 --item <item-id> --max-uses 1
+   ```
+2. Der ausgegebene Code erscheint nur dieses eine Mal. Er wird nicht gespeichert.
+3. `tools/backend/codes.json` im Backend-Repo ersetzen und auf Render deployen.
+4. Innerhalb von 7 Tagen im Goon Shop unter **Redeem code** einlösen. Die Freischaltung bleibt danach dauerhaft in `wallet.json`.
+
+### Schutz, ehrlich
+- **Der Code wird auf dem Server geprüft**, nicht im Client. Wer den Programmcode liest, findet ihn also nicht. `--max-uses 1` lässt nur ein Konto einlösen.
+- **Der Besitz liegt danach im Client.** `wallet.json` ist gegen einfaches Bearbeiten geschützt, aber ein veränderter Client könnte das Mount trotzdem anzeigen. Das Backend prüft fremden Besitz nicht, es nimmt nur das Format der Id an.
+- **Das Modell steckt in der JAR.** Wer die Datei auspackt, kann Name und Aussehen sehen.
+- **Stärker wäre** eine Prüfung im Backend mit einer Liste erlaubter UUIDs, sowohl beim Einlösen als auch beim Anzeigen. Das ist noch nicht eingebaut.
+
+### Texturen
+Mit demselben Maler wie alle Mounts, Ausgabe auch als `build/signature_texture.png`:
+```bash
+javac -encoding UTF-8 -cp "build/classes/java/client;build/classes/java/main" -d build/tools tools/GenerateMounts.java tools/GenerateSignatureMount.java
+java -cp "build/tools;build/classes/java/client;build/classes/java/main" GenerateSignatureMount
+```
+
 ## Update 3.87.0: Chat-Befehle /msg und /r entfernt
 
 Der Freunde-Chat hat keine eigenen Befehle mehr. Geschrieben wird im Chat-Tab und im Overlay. `/msg` und `/r` gehören damit wieder ganz dem Server: GoonClient fängt sie nicht mehr ab, und Nachrichten an Freunde gehen darüber nicht mehr in den Freunde-Chat.
