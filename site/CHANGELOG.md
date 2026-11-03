@@ -456,6 +456,12 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.90.0: Fehler bei Freundes-Stats und Chat behoben
+
+- **Stats in der Freundesliste:** Die Texte laufen nicht mehr in die Geschenk-Zeile. Das Feld war noch für fünf Besitz-Zeilen berechnet, inzwischen sind es neun.
+- **Reihenfolge im Chat:** Eigene Nachrichten, die noch auf die Antwort des Backends warten, stehen jetzt dort, wo sie abgeschickt wurden. Eine später eintreffende Antwort des Freundes steht darunter. Nach der Bestätigung gilt die Reihenfolge und die Uhrzeit des Backends.
+- **Vorschau in der Chat-Liste:** Emojis erscheinen dort als Bild statt als Kürzel wie `:creeper:`.
+
 ## Update 3.89.0: Neuer Anzeigename für ein exklusives Item
 
 Ein exklusives Item trägt jetzt einen anderen Anzeigenamen. Die interne Item-Id bleibt gleich, bestehende Freischaltungen, Codes und die Anzeige bei anderen Spielern bleiben also gültig.
