@@ -456,6 +456,49 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.93.0: Geheimnisvolles What's New
+
+Die Einträge im Fenster „What's New“, das nach einem Update aufpoppt, bestehen für die geheimen Updates (3.91.0 bis 3.93.0) nur noch aus Fragezeichen, Überschrift und Text. Was wirklich neu ist, steht hier in der README.
+
+## Update 3.92.0: Feinschliff für geheime Items
+
+- **Effekte der Seltenheit ???:** wenige, langsam aufsteigende Fragezeichen in Violett und Weiß, ein weicher Lichtpunkt bei besonderen Momenten und ein Namensschild mit wanderndem Violett-Grau-Verlauf. Alles abschaltbar (Effekte, Namensschild), mit festen Obergrenzen und Level of Detail: ab 32 Blöcken weniger, ab 64 Blöcken nichts.
+- **Haustiere allgemein:** höchstens 24 werden gezeichnet, die nächsten Spieler zuerst.
+- **Einstellungen geheimer Items** erscheinen erst nach der Freischaltung. Einige davon gelten nur auf dem eigenen Bildschirm, weil das Netz-Paket der Haustiere dafür keinen Platz hat; das Backend musste dafür nicht geändert werden.
+- **Synchronisierung:** Die Id läuft über das vorhandene Haustier-Feld (`^[a-z0-9_]{0,24}$`), Client und Backend nehmen sie ohne Änderung an. Der Code wird nie übertragen, unbekannte Ids bei anderen Spielern werden still ignoriert. Fremden Besitz kann niemand prüfen.
+
+## Update 3.91.0: Seltenheit ??? und geheime Items
+
+Es gibt eine neue, siebte Seltenheit: **???**. Sie steht über Legendary und über Exclusive, wird überall als „???“ angezeigt und hat einen dunklen violett-schwarzen Rahmen, an dessen Kante langsam ein helles Licht entlangläuft. Die fünf normalen Stufen, ihre Preisbänder, Exclusive und alle gespeicherten Daten bleiben unverändert, alte Wallets laden wie bisher.
+
+„???“-Items haben keinen Preis, kommen nie in den Goon Shop oder Hourly Shop, stehen in keiner Liste und auf keiner Wunschliste. Vor der Freischaltung zeigt die Oberfläche nichts davon. Freigeschaltet werden sie nur über das vorhandene Exclusive-Code-System. Danach öffnet sich das Inventar mit dem Item und dem Effekt „??? unlocked“.
+
+### Eigenen Code einrichten
+Der Code wird im Backend geprüft, in `codes.json` steht nur ein Hash. Im Projekt, in Tests und Logs steht kein echter Code; Tests nutzen nur einen klar markierten Testwert.
+1. Im Projektordner einen Code anlegen. Zufällig (empfohlen):
+   ```bash
+   py -3 tools/backend/add_code.py 0 --item <item-id> --max-uses 1
+   ```
+   Oder einen eigenen Wunsch-Code verdeckt eintippen (steht dann nicht in der Shell-Historie und wird nicht ausgegeben):
+   ```bash
+   py -3 tools/backend/add_code.py 0 --item <item-id> --max-uses 1 --ask
+   ```
+   Nur den Hash ausrechnen, ohne etwas einzutragen: `py -3 tools/backend/hash_code.py`. Kurze Codes lassen sich aus dem Hash erraten, besser 12 Zeichen oder mehr.
+2. `tools/backend/codes.json` im Backend-Repo ersetzen und auf Render deployen.
+3. Innerhalb von 7 Tagen im Goon Shop unter **Redeem code** einlösen. Die Freischaltung bleibt danach dauerhaft in `wallet.json`.
+
+### Auf normalen Shop-Kauf umstellen
+Ein Schalter in `ShopCatalog`: `SECRET_ITEMS_FOR_SALE = true` macht alle „???“-Items zu normalen Shop-Items für `SECRET_SHOP_PRICE` Coins (Standard 3000), mit 1 % Chance pro Platz im stündlichen Goon Shop. Bei `false` (Standard) gibt es sie nur per Code.
+
+### Schutz, ehrlich
+- **Der Code wird im Backend geprüft**, nicht im Client. Wer den Programmcode liest, findet ihn nicht. `--max-uses 1` lässt nur ein Konto einlösen.
+- **Der Besitz liegt danach im Client** (`wallet.json`, gegen einfaches Bearbeiten geschützt). Ein veränderter Client könnte das Item trotzdem zeigen; das Backend prüft fremden Besitz nicht.
+- **Modell und Textur stecken in der JAR.** Wer die Datei auspackt, sieht Name und Aussehen.
+- **Stärker wäre** eine Prüfung im Backend mit einer Liste erlaubter UUIDs, beim Einlösen und beim Weitergeben an andere Spieler. Das ist noch nicht eingebaut.
+
+### Texturen aus einem Skin
+Figuren aus einem Minecraft-Skin bekommen ihre Textur reproduzierbar aus der Skin-Datei im Projekt; die Anleitung steht im Kopf des Generators in `tools/`.
+
 ## Update 3.90.0: Fehler bei Freundes-Stats und Chat behoben
 
 - **Stats in der Freundesliste:** Die Texte laufen nicht mehr in die Geschenk-Zeile. Das Feld war noch für fünf Besitz-Zeilen berechnet, inzwischen sind es neun.
