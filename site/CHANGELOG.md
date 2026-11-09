@@ -456,6 +456,45 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.98.0: Reset einzelner Spieler und Fehler beim Zurücksetzen behoben
+
+**Fehler in 3.97.0:** Nach „Not my data“ oder dem automatischen Aufräumen lag das fremde Modpack noch in der Instanz
+(`config/goonclient`). Der Client hat es im selben Start sofort wieder in das Konto kopiert. Deshalb hatte der Kollege die Sachen
+weiterhin. Konnte der Client die Daten nicht als fremd erkennen (unmarkiert und man steht nicht in der Freundesliste), hat 3.97.0
+sie außerdem dem Kollegen zugeordnet.
+
+**Behoben:**
+- **Nach einem Reset** startet das Konto leer und als eigenes markiert. Es wird bewusst nichts aus der Instanz übernommen, auch
+  nicht beim nächsten Start.
+- **Ein frisch angelegtes Konto** gilt als vorhanden (`owner.json`): Ein später installiertes Modpack mit fremden GoonClient-Daten
+  wird nicht mehr übernommen.
+- **Fremd erkannte Kontodaten** werden weggeräumt, ohne gleich wieder aus derselben Instanz kopiert zu werden.
+
+**Neu: Reset eines einzelnen Spielers durch den Admin.** Er betrifft immer genau einen Spieler; ohne Ziel, mit ungültigem oder
+mehrdeutigem Namen gibt es einen Fehler und es passiert nichts.
+1. Auf Render muss die Umgebungsvariable `GOON_ADMIN_TOKEN` gesetzt sein (ein langes, geheimes Passwort; dasselbe wie für
+   `/v1/admin/reports`).
+2. Auf dem eigenen PC dasselbe Token setzen und den Spieler nennen:
+   ```
+   $env:GOON_ADMIN_TOKEN="..."
+   py -3 tools/backend/admin_reset.py SpielerName
+   ```
+   oder mit UUID statt Namen. Ein Name funktioniert nur, wenn der Spieler sich schon einmal mit GoonClient eingeloggt hat. Hatten
+   mehrere Spieler den Namen, verlangt das Werkzeug die UUID. `--list` zeigt alle Resets, `--cancel <id>` nimmt einen offenen zurück.
+3. **Auf dem Server sofort, nur für diesen Spieler:** angezeigte Cosmetics, Stats und seine offenen Freundschaftsanfragen werden
+   gelöscht. Freundschaften, Chats, Geschenke und eingelöste Codes bleiben.
+4. **Im Spiel (ab 3.98.0):** Nach dem Login fragt der Client nach (alle 5 Minuten). Bei einem Reset kommt eine Meldung, das Fenster
+   speichert und lädt bis zum Neustart nichts mehr hoch. Beim nächsten Start werden die Daten nach `foreign/` verschoben (nicht
+   gelöscht), der Spieler startet frisch, und der Client meldet dem Server „erledigt“.
+
+**Der Server hat sich geändert:** Neue Routen `/v1/admin/reset`, `/v1/admin/resets`, `/v1/admin/reset/cancel`,
+`/v1/account/reset` und `/v1/account/reset/ack`, neue Tabelle `resets` (die Sicherung auf GitHub enthält sie automatisch). Tests:
+`tools/backend/test_reset.py` und erweiterte `tools/DataStorageTest`.
+
+**Wichtig für geteilte Modpacks:** In ein Modpack, das weitergegeben wird, gehört der Ordner `config/goonclient` nicht hinein. Die
+GoonClient-JAR im Modpack sollte aktuell sein (mindestens 3.98.0), sonst läuft beim Empfänger noch die alte Version, die die
+Daten im Instanz-Ordner benutzt.
+
 ## Update 3.97.0: Daten gehören zum Konto (geteilte Modpacks)
 
 **Problem:** Wer sein Modpack an Freunde weitergab, gab den Ordner `config/goonclient` mit. Beim Freund hielt GoonClient 3.96.0

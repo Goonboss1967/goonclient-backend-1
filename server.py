@@ -46,6 +46,11 @@ Schnittstelle (alles JSON):
   POST /v1/chat/presence  {"mode": "online"|"away"|"hidden"}
   POST /v1/chat/block     {"uuid","blocked"}   POST /v1/chat/report {"with","id"}
   GET  /v1/admin/reports  (Authorization: Bearer <GOON_ADMIN_TOKEN>) -> Meldungen; ohne gesetztes Token gibt es den Endpunkt nicht
+  POST /v1/admin/reset    (Admin-Token) {"uuid" oder "name", "reason"} -> GoonClient-Daten EINES Spielers zurücksetzen lassen
+  GET  /v1/admin/resets   (Admin-Token) -> offene und erledigte Resets
+  POST /v1/admin/reset/cancel (Admin-Token) {"id"} -> offenen Reset zurücknehmen
+  GET  /v1/account/reset  (eingeloggt) -> {"reset": <id> oder null}: ein Admin hat einen Reset für mich angelegt
+  POST /v1/account/reset/ack (eingeloggt) {"id"} -> Client hat den Reset ausgeführt
   Website (Ordner site/ neben server.py):
   GET  /                                   -> die Website (site/index.html)
   GET  /download                           -> die neueste Client-JAR aus site/downloads/
@@ -252,6 +257,9 @@ class Store:
         self.db.execute("CREATE UNIQUE INDEX IF NOT EXISTS messages_cid ON messages (src, cid)")
         self.db.execute("CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter TEXT NOT NULL, reported TEXT NOT NULL, "
                         "message INTEGER NOT NULL, at REAL NOT NULL, excerpt TEXT NOT NULL)")
+        # Resets (ab Client 3.98.0): ein Admin setzt die GoonClient-Daten EINES Spielers zurück (z.B. geteiltes Modpack)
+        self.db.execute("CREATE TABLE IF NOT EXISTS resets (id INTEGER PRIMARY KEY AUTOINCREMENT, uuid TEXT NOT NULL, reason TEXT NOT NULL, "
+                        "created REAL NOT NULL, done REAL, cancelled REAL)")
         self.db.commit()
         self.chat_ttl = CHAT_TTL_DEFAULT
         self.last_chat_purge = 0.0
@@ -492,6 +500,54 @@ class Store:
             rows = self.db.execute("SELECT id, reporter, reported, message, at, excerpt FROM reports ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
             return [{"id": r[0], "reporter": r[1], "reporterName": self._name(r[1]), "reported": r[2], "reportedName": self._name(r[2]),
                      "message": r[3], "at": int(r[4] * 1000), "excerpt": json.loads(r[5])} for r in rows]
+
+    # ---------- Resets einzelner Spieler ----------
+
+    def uuids_named(self, name):
+        """Alle bekannten (von Mojang bestätigten) UUIDs mit diesem Namen, ohne Groß/Klein."""
+        with self.lock:
+            return [r[0] for r in self.db.execute("SELECT uuid FROM names WHERE lower(name)=lower(?)", (name,)).fetchall()]
+
+    def add_reset(self, uid, reason):
+        """Legt einen Reset für genau diesen Spieler an (oder gibt den offenen zurück) und räumt NUR seine Daten auf dem Server
+        auf: angezeigte Cosmetics, Stats und eigene offene Freundschaftsanfragen. Freundschaften, Chats, Geschenke bleiben."""
+        with self.lock:
+            row = self.db.execute("SELECT id FROM resets WHERE uuid=? AND done IS NULL AND cancelled IS NULL", (uid,)).fetchone()
+            if row:
+                rid = row[0]
+            else:
+                rid = self.db.execute("INSERT INTO resets(uuid, reason, created) VALUES(?,?,?)", (uid, reason, time.time())).lastrowid
+            self.db.execute("DELETE FROM cosmetics WHERE uuid=?", (uid,))
+            self.db.execute("DELETE FROM stats WHERE uuid=?", (uid,))
+            self.db.execute("DELETE FROM friend_requests WHERE src=?", (uid,))
+            self.db.commit()
+            return rid
+
+    def pending_reset(self, uid):
+        with self.lock:
+            row = self.db.execute("SELECT id FROM resets WHERE uuid=? AND done IS NULL AND cancelled IS NULL ORDER BY id LIMIT 1",
+                                  (uid,)).fetchone()
+            return row[0] if row else None
+
+    def ack_reset(self, uid, rid):
+        """Der Spieler meldet: Reset ausgeführt. Nur seine eigenen Resets."""
+        with self.lock:
+            cur = self.db.execute("UPDATE resets SET done=? WHERE id=? AND uuid=? AND done IS NULL AND cancelled IS NULL",
+                                  (time.time(), rid, uid))
+            self.db.commit()
+            return cur.rowcount == 1
+
+    def cancel_reset(self, rid):
+        with self.lock:
+            cur = self.db.execute("UPDATE resets SET cancelled=? WHERE id=? AND done IS NULL AND cancelled IS NULL", (time.time(), rid))
+            self.db.commit()
+            return cur.rowcount == 1
+
+    def list_resets(self, limit):
+        with self.lock:
+            rows = self.db.execute("SELECT id, uuid, reason, created, done, cancelled FROM resets ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+            return [{"id": r[0], "uuid": r[1], "name": self._name(r[1]), "reason": r[2], "created": int(r[3] * 1000),
+                     "state": "done" if r[4] else "cancelled" if r[5] else "pending"} for r in rows]
 
     # ---------- Geschenke ----------
 
@@ -1576,6 +1632,17 @@ def make_handler(state):
                     return self.chat_get(parsed)
                 if parsed.path == "/v1/admin/reports":
                     return self.admin_reports(parsed)
+                if parsed.path == "/v1/admin/resets":
+                    if not self.admin_ok():
+                        return None
+                    return self.send_json(200, {"resets": state.store.list_resets(200)})
+                if parsed.path == "/v1/account/reset":
+                    if not self.guard("friends", 240):
+                        return
+                    uid = state.uuid_for(self.bearer())
+                    if uid is None:
+                        return self.error(401, "not logged in")
+                    return self.send_json(200, {"reset": state.store.pending_reset(uid)})
                 if parsed.path in ("/v1/friends", "/v1/friends/profile"):
                     if not self.guard("friends", 240):
                         return
@@ -1713,6 +1780,49 @@ def make_handler(state):
                 return self.send_json(200, {"report": state.store.add_report(uid, other, mid)})
             return self.error(404, "not found")
 
+        def admin_ok(self):
+            """Admin-Token prüfen (und bei Fehler schon antworten). Ohne gesetztes GOON_ADMIN_TOKEN gibt es keine Admin-Routen."""
+            if not state.admin_token:
+                self.error(404, "not found")
+                return False
+            if not self.guard("admin", 30):
+                return False
+            if not secrets.compare_digest(self.bearer().encode("utf-8"), state.admin_token.encode("utf-8")):
+                self.error(401, "bad token")
+                return False
+            return True
+
+        def admin_reset(self, parsed, body):
+            if parsed.path == "/v1/admin/reset/cancel":
+                rid = body.get("id")
+                if not isinstance(rid, int) or isinstance(rid, bool):
+                    return self.error(400, "bad id")
+                if not state.store.cancel_reset(rid):
+                    return self.error(404, "no open reset with this id")
+                return self.send_json(200, {"ok": True})
+            if parsed.path != "/v1/admin/reset":
+                return self.error(404, "not found")
+            reason = body.get("reason", "")
+            if not isinstance(reason, str) or len(reason) > 200:
+                return self.error(400, "bad reason")
+            raw_uuid, name = body.get("uuid", ""), body.get("name", "")
+            if raw_uuid:
+                if not isinstance(raw_uuid, str):
+                    return self.error(400, "bad uuid")
+                uid = norm_uuid(raw_uuid)
+            elif isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9_]{1,16}", name):
+                found = state.store.uuids_named(name)
+                if not found:
+                    return self.error(404, "no GoonClient player with this name has logged in yet; use the uuid")
+                if len(found) > 1:
+                    return self.error(409, "several players had this name; use the uuid: " + ", ".join(found))
+                uid = found[0]
+            else:
+                return self.error(400, "give exactly one player: uuid or name")
+            rid = state.store.add_reset(uid, reason)
+            state.hub.publish(uid, {"type": "friends"})  # Client fragt dann bald nach
+            return self.send_json(200, {"id": rid, "uuid": uid, "name": state.store._name(uid)})
+
         def admin_reports(self, parsed):
             """Meldungen ansehen. Ohne gesetztes GOON_ADMIN_TOKEN gibt es diesen Endpunkt nicht."""
             if not state.admin_token:
@@ -1737,12 +1847,31 @@ def make_handler(state):
             is_redeem = parsed.path in ("/v1/redeem", "/v1/redeem/code")
             is_friends = parsed.path.startswith("/v1/friends/")
             is_gift = parsed.path in ("/v1/gifts/send", "/v1/gifts/claim")
+            if parsed.path.startswith("/v1/admin/"):
+                try:
+                    body = self.read_json()
+                except (ValueError, json.JSONDecodeError):
+                    return self.error(400, "bad request")
+                if not self.admin_ok():
+                    return None
+                try:
+                    return self.admin_reset(parsed, body)
+                except (ValueError, AttributeError):
+                    return self.error(400, "bad request")
             group, limit = ("emote", 60) if is_emote else ("redeem", 20) if is_redeem \
                 else ("friends_write", 60) if is_friends else ("gifts", 120) if is_gift else ("auth", 30)
             if not self.guard(group, limit):
                 return
             try:
                 body = self.read_json()  # immer lesen, sonst bleiben Bytes auf der Verbindung liegen
+                if parsed.path == "/v1/account/reset/ack":
+                    uid = state.uuid_for(self.bearer())
+                    if uid is None:
+                        return self.error(401, "not logged in")
+                    rid = body.get("id")
+                    if not isinstance(rid, int) or isinstance(rid, bool):
+                        return self.error(400, "bad id")
+                    return self.send_json(200, {"ok": state.store.ack_reset(uid, rid)})
                 if is_friends:
                     uid = state.uuid_for(self.bearer())
                     if uid is None:
