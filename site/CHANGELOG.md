@@ -456,6 +456,172 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.97.0: Daten gehören zum Konto (geteilte Modpacks)
+
+**Problem:** Wer sein Modpack an Freunde weitergab, gab den Ordner `config/goonclient` mit. Beim Freund hielt GoonClient 3.96.0
+diese Daten für seine eigenen und zog sie in seinen Konto-Ordner um: Er hatte danach dieselben Coins, Cosmetics, Outfits und
+Freunde. Das ging schon vor 3.96.0 so, weil die Daten einfach in der Instanz lagen.
+
+**Lösung:** Daten werden jetzt einem Minecraft-Konto zugeordnet.
+- **Markierung:** Jeder Konto-Ordner bekommt eine `owner.json` mit dem Konto-Schlüssel. Auch der alte Instanz-Ordner, aus dem
+  umgezogen wurde, wird so markiert. Wird ein Modpack später weitergegeben, erkennt der Client des Freundes die Daten als fremd
+  und übernimmt sie nicht. `owner.json` wird beim Kopieren nie mitgenommen.
+- **Unmarkierte alte Daten:** Steht der aktuelle Spieler selbst in der Freundesliste dieser Daten, sind es die Daten eines anderen
+  (niemand ist sein eigener Freund). Das trifft den typischen Fall: Man teilt das Modpack mit einem GoonClient-Freund.
+- **Wer schon betroffen ist:** Beim Start wird auch der eigene Konto-Ordner geprüft. Fremde Daten (Markierung eines anderen Kontos
+  oder man selbst in der Freundesliste) werden nach `foreign/<zeit>` verschoben, nicht gelöscht. Danach startet der Spieler mit
+  einem eigenen Konto. Gibt es in anderen Launchern eigene ältere Daten, werden die zurückgeholt; sonst beginnt er frisch. Im Spiel
+  erscheint ein Hinweis.
+- **Bei der Suche in anderen Launchern** werden fremde Daten nie übernommen; eigene markierte Daten haben Vorrang vor unbekannten.
+- **Knopf „Not my data“** in Einstellungen > Your data: legt die Daten beim nächsten Start beiseite. Er ist für den Fall gedacht,
+  dass sich fremde Daten nicht automatisch erkennen lassen (unmarkiert, und man stand nicht in der Freundesliste). Er lässt sich
+  abbrechen, und ein Import hebt ihn auf.
+- **Tests:** `tools/DataStorageTest` prüft das geteilte Modpack, bereits kopierte Daten, Markierungen, die Rangfolge, den Knopf
+  und den Import.
+
+**Grenzen:**
+- Unmarkierte Daten aus einem schon früher geteilten Modpack, in deren Freundesliste man nicht steht, lassen sich nicht automatisch
+  erkennen. Dafür gibt es den Knopf.
+- Coins, die der Freund mit den kopierten Daten verdient hat, lassen sich davon nicht trennen und liegen mit unter `foreign/`.
+- Freundschaftsanfragen, die der Client des Freundes mit der kopierten Liste schon verschickt hat, bleiben offen, bis sie
+  abgelehnt werden.
+
+## Update 3.96.0: Daten überleben Launcher-Wechsel und Modpack-Updates
+
+**Problem:** Coins, gekaufte Items, Outfits, Wunschliste und Einstellungen lagen bisher in `config/goonclient` der jeweiligen
+Minecraft-Instanz. Wer den Launcher wechselte oder seine Instanz (z.B. in der Modrinth App) aktualisierte, bekam einen neuen,
+leeren Ordner und hatte alles verloren.
+
+**Lösung:** Die Daten liegen jetzt in einem festen Ordner des Benutzers, getrennt pro Minecraft-Konto (UUID):
+- Windows: `%APPDATA%\GoonClient\accounts\<uuid>`
+- macOS: `~/Library/Application Support/GoonClient/accounts/<uuid>`
+- Linux: `$XDG_DATA_HOME/GoonClient/accounts/<uuid>` (sonst `~/.local/share/...`)
+- Ändern lässt er sich mit `-Dgoonclient.home=<ordner>` oder der Umgebungsvariable `GOONCLIENT_HOME`.
+
+Jeder Launcher und jede Instanz auf demselben Rechner mit demselben Konto benutzt damit dieselben Daten. Nur der Updater-Ordner
+(`update/`) bleibt in der Instanz, weil die JAR in deren `mods`-Ordner liegt.
+
+- **Umzug beim ersten Start:** Die Daten der aktuellen Instanz werden in den neuen Ordner kopiert. Die alten Dateien bleiben
+  unverändert liegen.
+- **Verlorene Daten zurückholen:** Hat die aktuelle Instanz keine oder kaum Daten (unter 60 verdienten Coins und unter einer
+  Stunde Spielzeit), durchsucht GoonClient die Instanzen der bekannten Launcher nach alten GoonClient-Daten und übernimmt die mit
+  dem meisten Fortschritt. Durchsucht werden: offizieller Launcher, Modrinth App, CurseForge, Prism Launcher (auch Flatpak), PolyMC,
+  FTB App, GDLauncher und ATLauncher. Im Spiel erscheint dann „Your coins and items were restored“. Eine Instanz mit echtem
+  eigenem Fortschritt wird nie ersetzt (z.B. bei einem fremden Konto auf demselben PC).
+- **Einstellungen > Your data:** zeigt den Speicherort, öffnet den Ordner und findet GoonClient-Daten aus anderen Launchern
+  (Coins, Items, Spielzeit, letztes Speichern). „Import“ übernimmt sie beim nächsten Start; der aktuelle Stand wird vorher nach
+  `backups/before-import-…` gesichert. Ein geplanter Import lässt sich abbrechen. Der Import passiert erst beim Neustart, weil das
+  laufende Spiel die Dateien beim Beenden sonst wieder überschreiben würde.
+- **Tägliche Sicherung:** einmal pro Tag eine Kopie in `backups/<datum>`, die letzten sieben bleiben.
+- **Zwei Fenster gleichzeitig:** Der Datenordner wird gesperrt. Ein zweites Fenster mit demselben Konto zeigt die Coins nur an:
+  Es verdient keine Coins, kauft nichts, holt keine Geschenke ab und speichert das Konto nicht. So überschreiben sich zwei
+  Fenster nie gegenseitig.
+- **Rückfall:** Ist der feste Ordner nicht beschreibbar, bleibt alles wie früher in der Instanz, mit Hinweis im Spiel.
+- **Neue Klassen:** `data/DataHome` (Pfade, Konto, Launcher-Suche), `data/DataMigration` (Umzug, Wiederherstellen, Import,
+  Sicherungen), `data/DataStore` (Start, Sperre). Tests: `tools/DataStorageTest`.
+
+**Grenze:** Die Daten liegen weiter nur auf diesem PC. Auf einem anderen Rechner sind sie nicht da; dafür bräuchte es eine
+Sicherung im Backend.
+
+## Update 3.95.0: Glas-Look nach Vorlage
+
+Die Oberfläche wurde nach dem Vorlagebild (lila Glas-Menü mit Kirschblüten) überarbeitet. Wie bei 3.94.0 gilt: nur Oberfläche,
+Themes und alle Farben kommen weiter aus dem gewählten Theme (die Vorlage ist in Goon Purple am nächsten dran).
+
+- **Formensprache:** Standard sind jetzt weiche, runde Ecken („Corners: Rounded“). Panels sind leicht durchscheinend, haben oben
+  einen Hauch Akzentfarbe, eine feine Lichtkante und ein weiches Leuchten am Rand („Glass Effect“, abschaltbar). Die Fasen-Optik
+  aus 3.94.0 gibt es weiter unter „Corners: Chamfered“. Die Einstellung heißt neu „Corners“, deshalb starten alle mit dem runden
+  Stil; das Raster („Background Grid“) ist standardmäßig aus.
+- **Aufbau:** äußerer Rahmen mit leuchtender Kante, darin zwei getrennte Glas-Panels: Navigation links, Inhalt rechts.
+- **Logo:** Krone und „GoonClient“ in der Script-Schrift mit leuchtendem Bogen und funkelnden Sternen. Ein Klick darauf zeigt wieder
+  „What's New“. In der schmalen Navigation nur die Krone. Fehlt die Script-Schrift, nimmt es die Standardschrift.
+- **Navigation:** größere Zeilen, die aktive Seite als leuchtende Fläche mit Verlauf in Akzentfarbe, weicher Hover.
+- **Fenster-Knöpfe** rechts in der Kopfzeile: „–“ klappt die Navigation auf Icons ein und wieder aus (bleibt gespeichert, solange
+  das Spiel läuft), „x“ schließt das Menü.
+- **Startseite neu:** Begrüßung („Welcome back, Name!“) mit kleiner Nachtszene (Mond, Torii, Pagode, Bäume, Kirschblüten),
+  Schnellzugriffe Modules / Cosmetics / Shop, Banner zum Battle Pass, rechts „Client Info“ (Version, FPS, Module, Online-Status)
+  und „Quick Settings“ (Animations, Particles, Blossoms, Glass Effect). Bei schmalem Inhalt stehen die rechten Karten darunter.
+- **Kirschblüten:** Blütenzweige an den Rahmenkanten (nie über Text) und fallende Blütenblätter statt der Punkt-Partikel
+  („Blossom Decor“, abschaltbar; die Blätter gehören zum Effekt „Floating Particles“). Bei Halloween bleibt die Halloween-Deko.
+  Bei „Reduce Animations“ stehen die Blätter still.
+- **Bausteine:** Schalter als Pille mit rundem Knopf und Leuchten, Slider mit runder Spur und rundem Knopf, Primär-Buttons mit
+  Verlauf und Leuchten, runde Icon-Buttons, Felder mit Leuchten beim Tippen, Chips und Badges als Pillen, Abschnittstitel mit
+  leuchtendem Strich. Neue Bausteine in `UiContext`: `glassPanel`, `glow`, `gradient`, `pill`, `roundOutline`.
+- **Neue Icons:** Krone, Stern, Herz, Blitz, Pfeil, Minus, Funkeln.
+- **Neue Klassen:** `gui/Logo`, `gui/BlossomDecor`. Layout (`UiLayout`) kennt jetzt das Inhaltspanel (`main`) und das Einklappen
+  der Navigation (`collapseNav`); beides ist in `tools/UiDesignTest` getestet.
+
+## Update 3.94.0: Neue Benutzeroberfläche („Kommandobrücke“)
+
+Das Menü ist komplett neu gestaltet. Geändert wurde nur die Oberfläche: Themes, Theme-Auswahl, gespeicherte Theme-Namen,
+Module, Netzwerk und Spiellogik sind unverändert. Alte Configs, Tastenbelegungen und HUD-Positionen laden weiter.
+
+### Aufbau
+- **Navigation links, in Gruppen:** *Game* (Home, Modul-Kategorien, Gadgets, HUD Editor, Waypoints, Pack Mixer),
+  *Cosmetics* (Goon Cosmetics, Inventory, Goon Shop, Event-Shops, Battle Pass, Missions), *Social* (Friends, Chat),
+  *System* (Settings, **Themes** – neu, About). Die Auswahl gleitet zum aktiven Eintrag; der HUD Editor ist ein eigener Eintrag.
+- **Kopfzeile:** Seitentitel mit Untertitel, globale Suche, Coin-Anzeige, Online-Status (Form + Farbe), feine Akzentlinie.
+- **Fußzeile:** Version und Tastenhinweise.
+- **Kompakte Ansicht:** Ist das Fenster logisch kleiner als 620 × 320 Pixel (große GUI-Skalierung, kleines Fenster), zeigt die
+  Navigation nur Icons (Name als Tooltip) und die Fußzeile entfällt. Unter 300 × 200 wird gescrollt statt gestaucht.
+- **Formensprache:** Flächen mit zwei abgeschrägten Ecken, feine Linien mit Marken, Eck-Klammern an Hauptpanels, dezentes Raster
+  im Hintergrund (abschaltbar), 4-Pixel-Raster, Abschnittstitel in gesperrten Großbuchstaben, neuer einheitlicher Icon-Satz (9 × 9).
+
+### Bedienung
+- **Suche (Strg+F):** findet Seiten, Module, Gadgets und Einstellungen; Treffer werden markiert. ↑/↓ wählt, Enter springt hin
+  (bei Modulen öffnet sich gleich das Einstellungs-Panel), Esc schließt. Die Modul-Ergebnisseite bleibt wie bisher.
+- **Tastatur:** Tab / Shift+Tab und die Pfeiltasten bewegen einen sichtbaren Fokusrahmen, Enter/Leertaste löst aus,
+  Esc schließt zuerst Overlays, dann den Fokus, dann das Menü. Die Menütaste und alle Keybinds bleiben wie gehabt.
+- **Rechtsklick auf eine Modulkarte:** Kontextmenü mit Ein/Aus, Einstellungen zeigen, Einstellungen zurücksetzen
+  (mit Bestätigungsdialog).
+
+### Einstellungen der Oberfläche (Settings oder Themes)
+| Einstellung | Werte | Standard |
+|---|---|---|
+| Menu Size | 50–150 % (deckt die gewünschten 80–140 % ab; der alte Bereich bleibt, damit gespeicherte Werte gültig sind) | 100 |
+| Density | Compact / Normal / Airy (Compact blendet die Hilfetexte unter Einstellungen aus) | Normal |
+| Corner Style | Chamfered (abgeschrägt) / Rounded | Chamfered |
+| Grid Background | an/aus | an |
+| Reduce Animations | an/aus: keine Lichtpunkte, keine Icon-Bewegung, keine Partikel, kürzere Übergänge | aus |
+| Animation Speed | 50–200 % | 100 |
+
+Die Werte stehen in der bestehenden Config; fehlen sie (alte Config), gelten die Standardwerte.
+
+### Themes und Farben
+- Alle Farben werden aus den sechs Theme-Farben abgeleitet (`gui/design/UiPalette`): Flächen, Linien, Hover, Fokus, Schatten,
+  Schrift auf Akzent. Text wird bei Bedarf so weit aufgehellt/abgedunkelt, bis er den Mindestkontrast erreicht (4,5 für Text,
+  3,0 für gedämpften Text) – auch auf hellen und kontrastarmen Themes. Die Theme-Definitionen selbst sind unverändert.
+- Feste Farben gibt es nur noch für Bedeutungen: Erfolg, Warnung, Fehler, Info, Münz-Gold, Favorit (`UiPalette.SUCCESS` …),
+  dazu Seltenheitsfarben, Event-Farben, Halloween-Deko und Inhalte wie Fadenkreuz-Farbvorgaben oder Waypoint-Farben.
+  Im Menü werden auch diese semantischen Farben pro Theme auf lesbaren Kontrast gebracht (`ui.pal.success` …).
+- Zustände sind nie nur farbcodiert: Marker haben Formen (Raute = an, Ring = aus, Strich = Taste, Dreieck = Warnung, X = Fehler),
+  der Schalter zeigt einen Strich bzw. einen hohlen Knopf.
+
+### Seiten und Fenster, die angepasst wurden
+Hauptmenü (`ClientScreen`, Navigation, Kopf-/Fußzeile, Suche), Home, alle Modul-Kategorien, Gadgets, Suchergebnisse, Modul-Panel,
+Waypoints, Pack Mixer, Goon Cosmetics, Inventory, Goon Shop, Event-Shop (Halloween), Battle Pass, Missions, Friends, Chat, Settings,
+**Themes (neu)**, About, Update-Fenster (`UpdatePopup`), What's New, HUD Editor (Eck-Griffe, Raster und Mittellinien beim Ziehen),
+Emote-Rad, Rechner, Fadenkreuz-Editor, Item-Größen, Chat-Overlay und Chat-Banner, Coin-Anzeige und Toasts.
+Die Ausgabe der HUD-Module im Spiel ist unverändert.
+
+### Eigene Seiten und Bausteine bauen
+- **Seite:** von `gui/pages/Page` erben und `renderContent(ui, x, y, w)` implementieren (Rückgabe = Höhe); Scrollen, Zuschneiden
+  und Rand macht die Basisklasse. Abschnittstitel mit `sectionTitle(...)`. In `ClientScreen.buildTabs()` eine Zeile `addTab(...)`
+  ergänzen (Gruppe als letzter Parameter). Die Schnittstelle von `Page` ist unverändert.
+- **Bausteine** (alle in `gui/UiContext`): `panel`, `card` (Zustände NORMAL/SELECTED/LOCKED/HIGHLIGHT), `sectionTitle`, `divider`,
+  `chip`, `badge`, `marker`, `progress`, `tooltip`, `contextMenu`, `confirm`, Knöpfe (`button` mit PRIMARY/SECONDARY/TEXT/DANGER,
+  deaktiviert, lädt), `primaryButton`, `dangerButton`, `iconButton`, `toggle`, `slider` (Wertfeld + Feinschritte), `field`,
+  `segments`, `dropdown`. Einstellungen zeichnet `SettingRenderer` automatisch (Name links, Wert rechts, Beschreibung darunter).
+- **Maße** stehen zentral in `gui/design/Design` (Raster, Fasen, Höhen, Animationszeiten), das Layout rechnet `gui/design/UiLayout`
+  (reines Java, getestet), die Suche `gui/design/SearchIndex`.
+
+### Grenzen
+- Eine Mehrfachauswahl-Komponente und eine Drag-Sortierliste gibt es noch nicht als allgemeinen Baustein (keine Seite braucht sie bisher).
+- Kein Offline-Vorschau-Renderer: `UiContext` zeichnet über `GuiGraphics` und die Minecraft-Schrift; ein Java2D-Nachbau wäre ein
+  zweiter Renderer, der vom echten Bild abweichen würde. Stattdessen: reine Layout-/Farbtests (`tools/UiDesignTest`) und
+  Screenshots aus dem Fabric-Client-Spieltest.
+- Mixins wurden nicht geändert.
+
 ## Update 3.93.0: Geheimnisvolles What's New
 
 Die Einträge im Fenster „What's New“, das nach einem Update aufpoppt, bestehen für die geheimen Updates (3.91.0 bis 3.93.0) nur noch aus Fragezeichen, Überschrift und Text. Was wirklich neu ist, steht hier in der README.
