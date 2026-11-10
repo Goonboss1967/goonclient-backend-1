@@ -2310,6 +2310,10 @@ def main():
     p.add_argument("--backup-seconds", type=float, default=float(os.environ.get("GOON_BACKUP_SECONDS", BACKUP_INTERVAL_DEFAULT)),
                    help="So oft die Datenbank sichern, wenn sie sich geändert hat (Standard: alle 2 Minuten)")
     args = p.parse_args()
+    if args.insecure and os.environ.get("RENDER"):
+        # Im Testmodus glaubt der Server jede UUID: dann könnte sich jeder als Admin (ADMIN_UUIDS) ausgeben
+        print("Refusing to start: --insecure is only for local tests and must never run on Render.", flush=True)
+        sys.exit(2)
     if os.environ.get("RENDER") and not args.trust_proxy:
         # Auf Render kommen alle Anfragen über deren Proxy: ohne X-Forwarded-For teilen sich ALLE Spieler ein Limit
         # (dann bekommt bei mehreren Spielern jeder "too many requests" und Emotes/Accessoires kommen nicht an)
@@ -2331,6 +2335,8 @@ def main():
     if hasattr(signal, "SIGBREAK"):
         signal.signal(signal.SIGBREAK, stop)  # das Gegenstück unter Windows
     print("GoonClient backend on http://%s:%d%s" % (args.host, args.port, "  (INSECURE test mode)" if args.insecure else ""))
+    print("Admin commands: %d admin account(s) in ADMIN_UUIDS%s" % (len(state.admin_uuids),
+          "" if state.admin_uuids else " - nobody can use admin commands"), flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

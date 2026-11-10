@@ -456,6 +456,26 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.100.0: Admin nur über ADMIN_UUIDS (ohne /op)
+
+Ersetzt das zweistufige Modell aus 3.99.0. Operator-Rechte auf einem Minecraft-Server spielen keine Rolle mehr.
+- **Wer Admin ist, entscheidet nur das Backend:** Die eigene Minecraft-UUID muss in der Render-Umgebungsvariable `ADMIN_UUIDS`
+  stehen. Erkannt wird der Spieler über seine Mojang-Anmeldung (der Server fragt bei Mojang nach, ob sich dieses Konto wirklich
+  angemeldet hat). Name oder UUID, die der Client mitschickt, werden für Admin-Befehle nie benutzt.
+- **Für alle anderen** gibt es kein Admin-Panel (nicht einmal eine Sperrzeile). `/gc` antwortet nur „Admin commands are not
+  available for this account.“ und schlägt nichts vor. Selbst ein veränderter Client hilft nicht: Das Backend lehnt jeden Befehl
+  von Konten außerhalb der Liste mit 403 ab und protokolliert den Versuch.
+- **Ohne `ADMIN_UUIDS`** (leer oder nicht gesetzt) ist niemand Admin. Beim Start schreibt der Server ins Log, wie viele Admin-Konten
+  er kennt.
+- **Schutz vor dem Testmodus:** `--insecure` glaubt jede UUID und ist nur für lokale Tests gedacht. Auf Render (Umgebungsvariable
+  `RENDER` gesetzt) verweigert der Server jetzt den Start damit, damit sich niemand als Admin ausgeben kann.
+- **Prüfung:** Der Client fragt nach jeder Anmeldung beim Backend nach (`/v1/admin/me`) und danach alle 5 Minuten. Bei einer neuen
+  Anmeldung, z.B. mit einem anderen Konto, wird die Freischaltung vergessen und neu geprüft.
+- **Tests:**
+  - `tools/AdminGiftTest`: nur „Active“ zeigt das Panel und sendet Befehle.
+  - `tools/backend/test_admin.py`: leere Liste bedeutet niemand ist Admin; eine fremde UUID in der Anfrage hilft nicht; `--insecure`
+    startet auf Render nicht.
+
 ## Update 3.99.0: Admin-Panel, Befehlssystem und Geschenke
 
 ### Sicherheitsmodell (zweistufig)
