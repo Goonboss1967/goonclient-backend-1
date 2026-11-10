@@ -456,6 +456,158 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.99.0: Admin-Panel, Befehlssystem und Geschenke
+
+### Sicherheitsmodell (zweistufig)
+1. **Oberfläche (Komfort):** Das Admin-Panel ganz unten im Settings-Tab ist nur benutzbar, wenn der Spieler auf dem aktuellen
+   Server Operator ist (Stufe mindestens 2, `AdminAccess.MIN_OP_LEVEL`). Die Stufe kommt aus `LocalPlayer.permissions()`
+   (ab 1.21.11 ein `PermissionSet`; der Server setzt beim `/op` ein `LevelBasedPermissionSet`). Das reagiert live: nach `/op` wird
+   das Panel ohne Neustart freigeschaltet. Ohne Operator-Rechte zeigt der Tab nur eine dezente Sperrzeile.
+2. **Autorisierung (echte Sicherheit):** Jeder Befehl läuft im Backend. Erlaubt ist er nur für Konten in der Umgebungsvariable
+   `ADMIN_UUIDS`. Wer der Aufrufer ist, bestimmt das Backend allein aus dem Sitzungstoken (Mojang-Anmeldung), nie aus Namen oder
+   UUIDs, die der Client schickt. Operator-Status allein reicht nie: In der eigenen Welt oder auf einem eigenen Server kann jeder
+   Operator sein.
+- **Zustände im Panel:** „Not in a world“ und „No operator“ (beide gesperrt), „Operator – online sync not connected“ (gesperrt),
+  „checking“, „Operator, but not a GoonClient admin“ (Befehle werden mit klarer Meldung abgelehnt), „Active“.
+- **Was nie im Client oder Repository liegt:** die Admin-Liste und das Admin-Token. Der Client schickt keine Admin-Anfragen,
+  solange die Oberfläche gesperrt ist, und nie ein Operator-Flag als Beweis.
+
+### `ADMIN_UUIDS` auf Render setzen (für Anfänger)
+1. Deine Minecraft-UUID herausfinden: auf https://namemc.com deinen Namen suchen (z.B. Goonboss19). Dort steht die UUID, etwa
+   `069a79f4-44e9-4726-a5be-fca90e38aaf5`.
+2. Auf https://dashboard.render.com einloggen und den Dienst des GoonClient-Backends öffnen.
+3. Links auf **Environment** klicken, dann **Add Environment Variable**.
+4. Key: `ADMIN_UUIDS`, Value: die UUID. Mehrere Admins mit Komma trennen: `uuid1,uuid2`.
+5. **Save Changes**. Render startet den Dienst neu (sonst „Manual Deploy“ → „Deploy latest commit“).
+6. Im Spiel: Welt mit Operator-Rechten betreten, Settings ganz unten. Dort steht „Admin: yes“.
+
+### Panel (Settings-Tab, ganz unten)
+- **Statuszeile:** Operator (Stufe), Admin-Freischaltung (ja / nein / wird geprüft), Backend.
+- **Konsole:**
+  - Ausgabe mit Uhrzeit; grün = Erfolg, gelb = Warnung, rot = Fehler. Mülleimer leert sie.
+  - Eingabe mit oder ohne `/`, Enter führt aus, Pfeil hoch/runter blättert im Verlauf.
+  - Tab vervollständigt Befehle, Spielernamen (Tab-Liste, Freunde, Ziele früherer Aktionen) und die Einheit. `help` zeigt alles.
+- **Schnellformular:** Spieler, Menge, Nachricht und die Knöpfe „Give coins“ / „Remove coins“. Ab 10.000 Coins kommt ein
+  Bestätigungsdialog (`AdminArgs.CONFIRM_ABOVE`). Es nutzt dieselbe Prüfung wie die Konsole.
+- **Befehlsliste:** automatisch aus der Registrierung.
+- **Verlauf:** die letzten Aktionen mit Zeit, Ziel, Menge und Status:
+  - give: pending, delivered (unopened), opened, expired
+  - del: pending, applied (mit der tatsächlich entfernten Menge), expired
+- **Gift preview:** zeigt das Geschenk in vier Größen, ohne etwas zu buchen.
+- **Chat:** `/gc give …`, `/gc del …`, `/gc help`. Bewusst kein `/give` oder `/del` als Client-Befehl, weil diese die Befehle des
+  Servers verdecken würden.
+
+### Befehle
+- `give <spieler> <anzahl> [Gooncoins] ["Nachricht"]`, z.B. `give Steve 500 Gooncoins "Danke fürs Mitspielen"`
+  - schickt Coins als Geschenk, das der Spieler öffnet
+  - Nachricht höchstens 80 Zeichen; Steuer- und Formatzeichen (§) werden entfernt, gezeichnet wird reiner Text
+- `del <spieler> <anzahl> [Gooncoins]` (Alias `remove`)
+  - entfernt Coins sofort beim Empfänger, nie unter 0
+  - der Empfänger sieht „An admin removed … Goon Coins“
+  - der Verlauf zeigt, wie viele tatsächlich entfernt wurden
+- `help [befehl]` (Alias `?`).
+- **Regeln:**
+  - Menge: ganze Zahl von 1 bis 1.000.000 pro Befehl; negative, dezimale, zu große und Null-Werte werden mit Meldung abgelehnt.
+  - Höchstens 10.000.000 pro Admin und Tag und höchstens 30 Befehle pro Minute.
+  - Einheit und Groß-/Kleinschreibung sind egal.
+- **Spielername:** Das Backend kennt nur Spieler, die sich schon einmal mit GoonClient angemeldet haben. Sonst kommt „That player
+  has not used GoonClient yet.“ Mehrdeutige Namen werden abgelehnt.
+
+### So funktioniert die Coin-Anpassung (Buchungsliste)
+Coins liegen lokal in `wallet.json` jedes Spielers. Ein Admin kann sie nicht direkt ändern. Deshalb führt das Backend eine
+Buchungsliste:
+- **Tabellen:**
+  - `adjustments`: Id, Ziel, Betrag mit Vorzeichen, give/del, Nachricht, Aussteller, Zeit, Status, angewendeter Betrag
+  - `audit`: wer, was, wann, Ergebnis; über die API nie löschbar, auch abgelehnte Versuche stehen drin
+- **Abruf:** Der Client holt nach der Anmeldung und dann alle 60 Sekunden seine offenen Anpassungen.
+  - **give:** Das Geschenk kommt ins Geschenkfach der Wallet (gespeichert), dann meldet der Client „delivered“. Die Coins kommen
+    erst beim Öffnen.
+  - **del:** Wird sofort gebucht (nie unter 0), gespeichert und mit dem tatsächlich entfernten Betrag als „applied“ gemeldet.
+- **Genau einmal:** Jede Anpassung wird nur einmal angewendet; ihre Id steht in der Wallet. Gutschrift und „geöffnet“ werden in
+  einem Schritt gespeichert, bevor die Animation beginnt. Bestätigungen wiederholen sich beim nächsten Abruf, bis das Backend sie
+  hat; doppelte Meldungen ändern dort nichts.
+- **Offline-Spieler:** Die Anpassung bleibt offen, bis der Spieler GoonClient mit Online-Sync startet. Nicht zugestellte
+  Anpassungen verfallen nach 30 Tagen (`--adjust-ttl` / `GOON_ADJUST_TTL`).
+- **Wallet-Format 2:**
+  - Neu: Geschenkfach, erledigte Anpassungs-Ids und das Feld „Admin-Anpassungen“ (Summe mit Vorzeichen; im Shop als eigene Zeile).
+  - „Total earned“ zählt weiter nur Spielzeit, „Spent“ nur Käufe.
+  - Alte Dateien laden unverändert, die Signatur bleibt gültig.
+- **Zweites Fenster mit demselben Konto:** holt keine Anpassungen ab (wie bei Freundes-Geschenken).
+
+### Geschenk
+- **Erscheinen:** Ein Hinweis oben in der Mitte (kleine wackelnde Box, „You received a gift“, Taste). Das Fenster öffnet sich beim
+  nächsten Menü (Pause, Inventar, GoonClient-Menü, Hauptmenü), auf Taste (Standard G) oder über das Geschenk-Symbol neben den
+  Coins im Menü.
+- **Einstellung „Gift Display“:** „Hint + next menu“ (Standard), „Open at once“, „Hint only“.
+- **Mehrere Geschenke:** „Gift 1 of 3“, danach „Next gift“; „Open all“ öffnet alle mit verkürzter Animation und der Summe.
+  Ungeöffnete bleiben im Fach, auch nach einem Neustart.
+- **Box:** facettiert, Deckel mit Lichtkante, Gravurlinien, Band mit Ornamentpunkten und wanderndem Lichtreflex, Schleife, goldenes
+  Siegel mit dem Goon-„G“; zusätzliche Eck-Ornamente je nach Stufe (unter 100, unter 1.000, unter 10.000, ab 10.000). Alles
+  prozedural aus Theme-Farben plus Münz-Gold. Auf hellen Themes ist der Hintergrund ein heller Schleier statt einer Abdunklung.
+- **Vor dem Öffnen:** Die Box schwebt, der Schein darunter pulsiert, und etwa alle 2,6 Sekunden wackelt sie kurz. Der Betrag ist
+  noch nicht zu sehen.
+- **Öffnen (etwa 3,5 s, zeitbasiert):**
+  - 0,0–0,5 s: Die Box drückt sich zusammen, Licht kommt aus den Fugen.
+  - ab 0,5 s: Der Deckel fliegt weg, ein Lichtstoß geht nach oben, das Band löst sich auf. Kurz hellt sich das Bild auf
+    (höchstens 0,35 Deckkraft, kürzer als 200 ms, genau einmal).
+  - 0,5–1,5 s: 12–36 Strahlen, 2–3 Druckwellen-Ringe und Funken mit Schweif (höchstens 150 Partikel).
+  - ab 1,0 s: Die Münze steigt auf und dreht sich, „YOU RECEIVED“ gleitet ein, der Betrag zählt bis etwa 2,2–3 s hoch und endet
+    genau beim echten Wert.
+  - ab 2,5 s: Absender und Nachricht erscheinen, dann der Knopf „Collect“ bzw. „Next gift“.
+  - Beim Klick auf „Collect“ fliegt die Münze zur Coin-Anzeige.
+- **Abbrechen:** Esc oder ein Klick während der Animation springt zum Ende (die Coins sind schon gebucht). Esc vor dem Öffnen
+  schließt das Fenster, das Geschenk bleibt im Fach.
+- **Einstellungen:**
+  - „Gift Effects“: Full / Reduced (kein Wackeln, kein Aufhellen, weniger Partikel) / Off (Inhalt sofort).
+  - „Reduce Animations“ des Menüs macht aus Full automatisch Reduced.
+  - „Gift Sound“ schaltet die Töne.
+  - „Open Gift“ ist die Taste.
+- **Töne:** dezent tiefer bzw. höher gestimmte Minecraft-Klänge (Rascheln, ansteigender Ton, weicher Knall mit Glanz,
+  Münzklingeln), über das vorhandene Sound-System. Eigene Klangdateien bräuchten `ffmpeg` (und `numpy`) zum Erzeugen, beides war
+  hier nicht installiert.
+
+### So fügst du einen Admin-Befehl hinzu
+1. **Client:** eine Klasse, die `com.goonclient.admin.AdminCommand` umsetzt, und eine Zeile in `AdminCommands.createDefault()`:
+   ```java
+   public final class Ping implements AdminCommand {
+       public String name() { return "ping"; }
+       public String description() { return "Checks the backend."; }
+       public String syntax() { return "ping"; }
+       public Map<String, Object> parse(List<String> args) throws CommandException {
+           if (!args.isEmpty()) throw new CommandException("No arguments.", syntax());
+           return Map.of();
+       }
+       public void execute(Map<String, Object> p, AdminContext ctx, Consumer<CommandResult> done) {
+           ctx.backend("ping", p, done);
+       }
+   }
+   // in AdminCommands.createDefault():  r.register(new Ping());
+   ```
+   Hilfe, Befehlsliste, Autovervollständigung, Konsole und `/gc` kennen ihn dann automatisch.
+2. **Backend:** eine Funktion `cmd_ping(state, issuer, issuer_name, args)` in `server.py`, die ein dict zurückgibt (bei Fehlern
+   `AdminError(status, text)`), und ein Eintrag `"ping": cmd_ping` in `ADMIN_COMMANDS`. Admin-Prüfung, Rate-Limit und Audit
+   übernimmt der gemeinsame Endpunkt.
+- **Warum ein gemeinsamer Endpunkt** (`POST /v1/admin/command`): Anmeldung, Admin-Liste, Rate-Limit, Tageslimit und Audit gibt es
+  dann genau einmal, und kein neuer Befehl kann eine dieser Prüfungen vergessen.
+
+### Grenzen (ehrlich)
+- **Coins bleiben lokal und manipulierbar.** Die Signatur schützt nur gegen versehentliches Bearbeiten. Wer seine Wallet-Datei
+  selbst ändert, kann sich weiterhin Coins geben. Das Backend ist nur für die Ausgabe der Admin-Anpassungen verbindlich. Eine
+  vollständig serverseitige Wallet wäre ein späterer, größerer Umbau.
+- **Render:** Auf dem kostenlosen Plan ist die Festplatte nach einem Neustart oder Deploy leer. Offene Anpassungen und das Audit
+  liegen in derselben Datenbank wie Freunde und Chats und sind damit von der vorhandenen GitHub-Sicherung (`GOON_BACKUP_REPO` /
+  `GOON_BACKUP_TOKEN`) abgedeckt. Ohne diese Sicherung gehen sie bei jedem Deploy verloren. Empfehlung: die Sicherung eingeschaltet
+  lassen. Dauerhaft sicherer wäre eine Render Persistent Disk (kostenpflichtig) oder eine externe Datenbank. Die Datenzugriffe
+  liegen gesammelt in der Klasse `Store`, ein Wechsel betrifft nur sie.
+- **In 1.21.11 nicht überall geprüft:**
+  - Die Operator-Stufe wurde im Spieltest nur in einer Einzelspielerwelt mit Cheats gelesen (Stufe 4); auf einem echten
+    Mehrspieler-Server nicht.
+  - Das Panel im Zustand „Active“ wurde nicht im Spiel gesehen, weil der Spieltest kein Backend hat.
+  - Die Geschenk-Animation wurde als Standbilder in drei Themes und zwei Stufen geprüft, dazu Hinweis, automatisches Öffnen und
+    Gutschrift (genau einmal); nicht als laufende Animation.
+- **Tests:** `tools/AdminGiftTest` (Parser, Registrierung, Wallet, Geschenkfach, Zustände, Zeitlinie) und
+  `tools/backend/test_admin.py` (gegen das echte Backend).
+
 ## Update 3.98.0: Reset einzelner Spieler und Fehler beim Zurücksetzen behoben
 
 **Fehler in 3.97.0:** Nach „Not my data“ oder dem automatischen Aufräumen lag das fremde Modpack noch in der Instanz

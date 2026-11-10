@@ -51,6 +51,13 @@ Schnittstelle (alles JSON):
   POST /v1/admin/reset/cancel (Admin-Token) {"id"} -> offenen Reset zurücknehmen
   GET  /v1/account/reset  (eingeloggt) -> {"reset": <id> oder null}: ein Admin hat einen Reset für mich angelegt
   POST /v1/account/reset/ack (eingeloggt) {"id"} -> Client hat den Reset ausgeführt
+  Admin-Befehle (ab Client 3.99.0), nur für Konten in ADMIN_UUIDS (Absender immer aus dem Sitzungstoken):
+  GET  /v1/admin/me          (eingeloggt) -> {"admin": bool}
+  POST /v1/admin/command     (eingeloggt, Admin) {"command": "give"|"del", "args": {...}} -> Ergebnis
+  GET  /v1/admin/history     (eingeloggt, Admin) -> eigene Anpassungen mit Status
+  GET  /v1/adjustments       (eingeloggt) -> offene Anpassungen (Geschenke/Abzüge) für mich
+  POST /v1/adjustments/delivered {"id"} -> Geschenk liegt beim Spieler
+  POST /v1/adjustments/applied   {"id", "amount"} -> angewendet (tatsächlicher Betrag)
   Website (Ordner site/ neben server.py):
   GET  /                                   -> die Website (site/index.html)
   GET  /download                           -> die neueste Client-JAR aus site/downloads/
@@ -85,6 +92,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ID_RE = re.compile(r"^[a-z0-9_]{0,24}$")
 MAX_BODY = 16384
+# Admin-Befehle: Obergrenzen (siehe ADMIN_COMMANDS)
+ADMIN_MAX_AMOUNT = 1_000_000          # pro Befehl
+ADMIN_DAILY_AMOUNT = 10_000_000       # pro Admin und Tag (Summe aller Beträge)
+ADMIN_COMMANDS_PER_MINUTE = 30
+ADMIN_MESSAGE_MAX = 80
+ADJUST_TTL_DEFAULT = 30 * 86400       # offene Anpassungen verfallen nach 30 Tagen
+ADJ_ID_RE = re.compile(r"^adj_[0-9a-f]{16}$")
 MAX_UUIDS = 100
 MAX_CODE_COINS = 100000
 CHALLENGE_TTL = 60
@@ -257,6 +271,14 @@ class Store:
         self.db.execute("CREATE UNIQUE INDEX IF NOT EXISTS messages_cid ON messages (src, cid)")
         self.db.execute("CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter TEXT NOT NULL, reported TEXT NOT NULL, "
                         "message INTEGER NOT NULL, at REAL NOT NULL, excerpt TEXT NOT NULL)")
+        # Admin-Anpassungen (ab Client 3.99.0): Buchungsliste für Coins (Coins selbst liegen beim Spieler) und ein Audit-Protokoll,
+        # das über die API nie gelöscht werden kann
+        self.db.execute("CREATE TABLE IF NOT EXISTS adjustments (id TEXT PRIMARY KEY, target TEXT NOT NULL, amount INTEGER NOT NULL, "
+                        "kind TEXT NOT NULL, message TEXT NOT NULL, issuer TEXT NOT NULL, issuer_name TEXT NOT NULL, created REAL NOT NULL, "
+                        "status TEXT NOT NULL, applied INTEGER, delivered_at REAL, applied_at REAL)")
+        self.db.execute("CREATE INDEX IF NOT EXISTS adjustments_target ON adjustments (target, status)")
+        self.db.execute("CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY AUTOINCREMENT, at REAL NOT NULL, actor TEXT NOT NULL, "
+                        "action TEXT NOT NULL, target TEXT NOT NULL, detail TEXT NOT NULL, result TEXT NOT NULL)")
         # Resets (ab Client 3.98.0): ein Admin setzt die GoonClient-Daten EINES Spielers zurück (z.B. geteiltes Modpack)
         self.db.execute("CREATE TABLE IF NOT EXISTS resets (id INTEGER PRIMARY KEY AUTOINCREMENT, uuid TEXT NOT NULL, reason TEXT NOT NULL, "
                         "created REAL NOT NULL, done REAL, cancelled REAL)")
@@ -500,6 +522,86 @@ class Store:
             rows = self.db.execute("SELECT id, reporter, reported, message, at, excerpt FROM reports ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
             return [{"id": r[0], "reporter": r[1], "reporterName": self._name(r[1]), "reported": r[2], "reportedName": self._name(r[2]),
                      "message": r[3], "at": int(r[4] * 1000), "excerpt": json.loads(r[5])} for r in rows]
+
+    # ---------- Admin-Anpassungen ----------
+
+    def audit(self, actor, action, target, detail, result):
+        with self.lock:
+            self.db.execute("INSERT INTO audit(at, actor, action, target, detail, result) VALUES(?,?,?,?,?,?)",
+                            (time.time(), actor, action, target, json.dumps(detail, ensure_ascii=False), result))
+            self.db.commit()
+
+    def audit_entries(self, limit=100):
+        with self.lock:
+            rows = self.db.execute("SELECT at, actor, action, target, detail, result FROM audit ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [{"at": int(r[0] * 1000), "actor": r[1], "action": r[2], "target": r[3], "detail": json.loads(r[4]), "result": r[5]}
+                for r in rows]
+
+    def admin_amount_today(self, issuer):
+        start = time.time() - 86400
+        with self.lock:
+            row = self.db.execute("SELECT COALESCE(SUM(ABS(amount)), 0) FROM adjustments WHERE issuer=? AND created > ?",
+                                  (issuer, start)).fetchone()
+        return int(row[0])
+
+    def add_adjustment(self, target, amount, kind, message, issuer, issuer_name):
+        aid = "adj_" + secrets.token_hex(8)
+        with self.lock:
+            self.db.execute("INSERT INTO adjustments(id, target, amount, kind, message, issuer, issuer_name, created, status) "
+                            "VALUES(?,?,?,?,?,?,?,?, 'pending')", (aid, target, amount, kind, message, issuer, issuer_name, time.time()))
+            self.db.commit()
+        return aid
+
+    def expire_adjustments(self, ttl):
+        """Offene (noch nicht zugestellte) Anpassungen verfallen nach der Frist."""
+        with self.lock:
+            self.db.execute("UPDATE adjustments SET status='expired' WHERE status='pending' AND created < ?", (time.time() - ttl,))
+            self.db.commit()
+
+    def adjustments_for(self, target):
+        """Was der Spieler noch bearbeiten muss: offene und zugestellte (noch nicht angewendete) Anpassungen."""
+        with self.lock:
+            rows = self.db.execute("SELECT id, amount, kind, message, issuer_name, created, status FROM adjustments "
+                                   "WHERE target=? AND status IN ('pending','delivered') ORDER BY created LIMIT 100", (target,)).fetchall()
+        return [{"id": r[0], "amount": abs(r[1]), "kind": r[2], "message": r[3], "from": r[4], "at": int(r[5] * 1000),
+                 "status": r[6]} for r in rows]
+
+    def mark_adjustment_delivered(self, target, aid):
+        with self.lock:
+            row = self.db.execute("SELECT kind, status FROM adjustments WHERE id=? AND target=?", (aid, target)).fetchone()
+            if not row:
+                return None
+            if row[1] == "pending" and row[0] == "give":
+                self.db.execute("UPDATE adjustments SET status='delivered', delivered_at=? WHERE id=?", (time.time(), aid))
+                self.db.commit()
+                return "delivered"
+            return row[1]
+
+    def mark_adjustment_applied(self, target, aid, amount):
+        """Angewendet: bei give genau der Betrag, bei del höchstens der verlangte. Doppelte Meldungen ändern nichts."""
+        with self.lock:
+            row = self.db.execute("SELECT kind, status, amount FROM adjustments WHERE id=? AND target=?", (aid, target)).fetchone()
+            if not row:
+                return None
+            kind, status, want = row
+            if status not in ("pending", "delivered"):
+                return status
+            if kind == "give" and amount != want:
+                return "bad amount"
+            if kind == "del" and not 0 <= amount <= -want:
+                return "bad amount"
+            now = time.time()
+            self.db.execute("UPDATE adjustments SET status='applied', applied=?, applied_at=?, "
+                            "delivered_at=COALESCE(delivered_at, ?) WHERE id=?", (amount, now, now, aid))
+            self.db.commit()
+            return "applied"
+
+    def issuer_history(self, issuer, limit=50):
+        with self.lock:
+            rows = self.db.execute("SELECT id, target, amount, kind, message, created, status, applied FROM adjustments "
+                                   "WHERE issuer=? ORDER BY created DESC LIMIT ?", (issuer, limit)).fetchall()
+            return [{"id": r[0], "target": r[1], "targetName": self._name(r[1]), "amount": abs(r[2]), "kind": r[3], "message": r[4],
+                     "at": int(r[5] * 1000), "status": r[6], "applied": r[7]} for r in rows]
 
     # ---------- Resets einzelner Spieler ----------
 
@@ -1401,6 +1503,16 @@ class State:
         self.store.chat_ttl = args.chat_ttl
         self.hub = ChatHub()
         self.admin_token = args.admin_token
+        # Admin-Konten für Befehle: nur über die Umgebung (ADMIN_UUIDS) oder das Startargument, nie aus dem Client
+        self.admin_uuids = set()
+        for part in (args.admin_uuids or "").split(","):
+            part = part.strip()
+            if part:
+                try:
+                    self.admin_uuids.add(norm_uuid(part))
+                except ValueError:
+                    print("ADMIN_UUIDS: ignoring invalid uuid %r" % part, flush=True)
+        self.adjust_ttl = args.adjust_ttl
         self.limiter = RateLimiter()
         self.emotes = Emotes()
         self.codes = Codes(args.codes)
@@ -1439,6 +1551,82 @@ class State:
         if entry and entry[1] > time.time():
             return entry[0]
         return None
+
+
+def clean_admin_message(raw):
+    """Nachricht eines Admin-Geschenks: reiner Text, höchstens ADMIN_MESSAGE_MAX Zeichen, keine Steuer- und Formatzeichen."""
+    if raw is None or raw == "":
+        return ""
+    if not isinstance(raw, str):
+        raise ValueError("message must be text")
+    text = "".join(ch for ch in raw if not (ord(ch) < 32 or ord(ch) == 127 or 0x80 <= ord(ch) < 0xA0 or ch == "\u00a7"))
+    text = " ".join(text.split())
+    if len(text) > ADMIN_MESSAGE_MAX:
+        raise ValueError("message too long (max %d)" % ADMIN_MESSAGE_MAX)
+    return text
+
+
+def admin_target(state, args):
+    """Spielername -> UUID, nur bekannte GoonClient-Spieler. Gibt (uuid, name) oder wirft AdminError."""
+    name = args.get("player")
+    if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_]{1,16}", name):
+        raise AdminError(400, "bad player name")
+    found = state.store.uuids_named(name)
+    if not found:
+        raise AdminError(404, "player has not used GoonClient")
+    if len(found) > 1:
+        raise AdminError(409, "several players had this name")
+    return found[0], state.store._name(found[0]) or name
+
+
+def admin_amount(args):
+    amount = args.get("amount")
+    if not isinstance(amount, int) or isinstance(amount, bool):
+        raise AdminError(400, "amount must be a whole number")
+    if amount < 1:
+        raise AdminError(400, "amount must be at least 1")
+    if amount > ADMIN_MAX_AMOUNT:
+        raise AdminError(400, "amount too large (max %d)" % ADMIN_MAX_AMOUNT)
+    return amount
+
+
+class AdminError(Exception):
+    def __init__(self, status, message):
+        super().__init__(message)
+        self.status = status
+        self.message = message
+
+
+def cmd_give(state, issuer, issuer_name, args):
+    target, target_name = admin_target(state, args)
+    amount = admin_amount(args)
+    try:
+        message = clean_admin_message(args.get("message", ""))
+    except ValueError as e:
+        raise AdminError(400, str(e))
+    check_daily(state, issuer, amount)
+    aid = state.store.add_adjustment(target, amount, "give", message, issuer, issuer_name)
+    return {"id": aid, "status": "pending", "target": target, "targetName": target_name, "amount": amount, "message": message}
+
+
+def cmd_del(state, issuer, issuer_name, args):
+    target, target_name = admin_target(state, args)
+    amount = admin_amount(args)
+    check_daily(state, issuer, amount)
+    aid = state.store.add_adjustment(target, -amount, "del", "", issuer, issuer_name)
+    return {"id": aid, "status": "pending", "target": target, "targetName": target_name, "amount": amount}
+
+
+def check_daily(state, issuer, amount):
+    if state.store.admin_amount_today(issuer) + amount > ADMIN_DAILY_AMOUNT:
+        raise AdminError(429, "daily limit reached (max %d per day)" % ADMIN_DAILY_AMOUNT)
+
+
+# Befehlstabelle: neuer Befehl = eine Funktion (state, issuer, issuer_name, args) -> dict, plus ein Eintrag hier
+ADMIN_COMMANDS = {
+    "give": cmd_give,
+    "del": cmd_del,
+}
 
 
 def mojang_has_joined(state, username, server_id):
@@ -1632,6 +1820,21 @@ def make_handler(state):
                     return self.chat_get(parsed)
                 if parsed.path == "/v1/admin/reports":
                     return self.admin_reports(parsed)
+                if parsed.path in ("/v1/admin/me", "/v1/admin/history", "/v1/adjustments"):
+                    if not self.guard("friends", 240):
+                        return
+                    uid = state.uuid_for(self.bearer())
+                    if uid is None:
+                        return self.error(401, "not logged in")
+                    if parsed.path == "/v1/admin/me":
+                        return self.send_json(200, {"admin": uid in state.admin_uuids})
+                    if parsed.path == "/v1/adjustments":
+                        state.store.expire_adjustments(state.adjust_ttl)
+                        return self.send_json(200, {"adjustments": state.store.adjustments_for(uid)})
+                    if uid not in state.admin_uuids:
+                        return self.error(403, "not allowed")
+                    state.store.expire_adjustments(state.adjust_ttl)
+                    return self.send_json(200, {"history": state.store.issuer_history(uid)})
                 if parsed.path == "/v1/admin/resets":
                     if not self.admin_ok():
                         return None
@@ -1780,6 +1983,65 @@ def make_handler(state):
                 return self.send_json(200, {"report": state.store.add_report(uid, other, mid)})
             return self.error(404, "not found")
 
+        def admin_command(self):
+            """Admin-Befehl aus der Befehlstabelle. Absender nur aus dem Sitzungstoken, nur Konten aus ADMIN_UUIDS."""
+            if not self.guard("admin_cmd_ip", 120):
+                return None
+            try:
+                body = self.read_json()
+            except (ValueError, json.JSONDecodeError):
+                return self.error(400, "bad request")
+            uid = state.uuid_for(self.bearer())
+            if uid is None:
+                return self.error(401, "not logged in")
+            name = body.get("command") if isinstance(body, dict) else None
+            if uid not in state.admin_uuids:
+                state.store.audit(uid, str(name)[:32], "", {}, "denied: not an admin")
+                return self.error(403, "not allowed")
+            if not state.limiter.allow(uid, "admin_cmd", ADMIN_COMMANDS_PER_MINUTE, 60.0):
+                return self.error(429, "too many admin commands, wait a minute")
+            handler = ADMIN_COMMANDS.get(name) if isinstance(name, str) else None
+            args = body.get("args", {})
+            if handler is None or not isinstance(args, dict):
+                return self.error(400, "unknown command")
+            issuer_name = state.store._name(uid)
+            try:
+                result = handler(state, uid, issuer_name, args)
+            except AdminError as e:
+                state.store.audit(uid, name, str(args.get("player", ""))[:16], {"amount": args.get("amount")}, "rejected: " + e.message)
+                return self.error(e.status, e.message)
+            state.store.audit(uid, name, result.get("target", ""), {"amount": result.get("amount"), "id": result.get("id"),
+                              "message": result.get("message", "")}, "ok")
+            return self.send_json(200, result)
+
+        def adjustment_ack(self, path):
+            if not self.guard("friends_write", 120):
+                return None
+            try:
+                body = self.read_json()
+            except (ValueError, json.JSONDecodeError):
+                return self.error(400, "bad request")
+            uid = state.uuid_for(self.bearer())
+            if uid is None:
+                return self.error(401, "not logged in")
+            aid = body.get("id") if isinstance(body, dict) else None
+            if not isinstance(aid, str) or not ADJ_ID_RE.fullmatch(aid):
+                return self.error(400, "bad id")
+            if path.endswith("/delivered"):
+                status = state.store.mark_adjustment_delivered(uid, aid)
+            else:
+                amount = body.get("amount")
+                if not isinstance(amount, int) or isinstance(amount, bool) or amount < 0:
+                    return self.error(400, "bad amount")
+                status = state.store.mark_adjustment_applied(uid, aid, amount)
+                if status == "applied":
+                    state.store.audit(uid, "applied", uid, {"id": aid, "amount": amount}, "ok")
+            if status is None:
+                return self.error(404, "no such adjustment")  # auch fremde: nicht verraten, dass es sie gibt
+            if status == "bad amount":
+                return self.error(400, "bad amount")
+            return self.send_json(200, {"status": status})
+
         def admin_ok(self):
             """Admin-Token prüfen (und bei Fehler schon antworten). Ohne gesetztes GOON_ADMIN_TOKEN gibt es keine Admin-Routen."""
             if not state.admin_token:
@@ -1847,6 +2109,10 @@ def make_handler(state):
             is_redeem = parsed.path in ("/v1/redeem", "/v1/redeem/code")
             is_friends = parsed.path.startswith("/v1/friends/")
             is_gift = parsed.path in ("/v1/gifts/send", "/v1/gifts/claim")
+            if parsed.path == "/v1/admin/command":
+                return self.admin_command()
+            if parsed.path in ("/v1/adjustments/delivered", "/v1/adjustments/applied"):
+                return self.adjustment_ack(parsed.path)
             if parsed.path.startswith("/v1/admin/"):
                 try:
                     body = self.read_json()
@@ -2035,6 +2301,10 @@ def main():
     p.add_argument("--verbose", action="store_true")
     p.add_argument("--chat-ttl", type=float, default=float(os.environ.get("GOON_CHAT_TTL", CHAT_TTL_DEFAULT)),
                    help="Chat-Nachrichten nach so vielen Sekunden löschen (Standard: 7 Tage)")
+    p.add_argument("--admin-uuids", default=os.environ.get("ADMIN_UUIDS", ""),
+                   help="Minecraft-UUIDs der GoonClient-Admins, durch Kommas getrennt (Standard: Umgebungsvariable ADMIN_UUIDS)")
+    p.add_argument("--adjust-ttl", type=float, default=float(os.environ.get("GOON_ADJUST_TTL", ADJUST_TTL_DEFAULT)),
+                   help="Offene Admin-Anpassungen nach so vielen Sekunden verfallen lassen (Standard: 30 Tage)")
     p.add_argument("--admin-token", default=os.environ.get("GOON_ADMIN_TOKEN", ""),
                    help="Token für /v1/admin/reports (Standard: Umgebungsvariable GOON_ADMIN_TOKEN; leer = kein Abruf)")
     p.add_argument("--backup-seconds", type=float, default=float(os.environ.get("GOON_BACKUP_SECONDS", BACKUP_INTERVAL_DEFAULT)),
