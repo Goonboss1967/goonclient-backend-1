@@ -456,6 +456,201 @@ Die Website läuft auf demselben Render-Server wie das Backend: **https://gooncl
   `/v1/site` (Version, Downloads je Minecraft-Version, Updates, Codes als JSON).
 - **Lokal ansehen:** `py -3 tools/backend/server.py --insecure --port 8097`, dann http://localhost:8097 öffnen.
 
+## Update 3.101.0: Season 2 „Orrery – The Brass Observatory“
+
+### Thema und warum
+Season 2 heißt **Orrery** (ein Orrery ist ein mechanisches Modell des Sonnensystems). Das Thema ist eine Sternwarte aus Messing:
+Armillarsphären, Sextanten, Sternkarten auf Pergament, Laternen mit eingefangenen Sternen. Gewählt, weil es sich klar von
+Season 1 „Neon Nights“ (Synthwave, Pink/Cyan) und vom Halloween-Event (Orange/Schwarz) abhebt. Es passt außerdem zu Minecraft
+(Nachthimmel, Messing und Kupfer mit Grünspan) und gibt allen Cosmetic-Arten ein gemeinsames Motiv: Ringe, Sterne und
+Gradskalen.
+
+**Palette:**
+
+| Farbe | Hex |
+|---|---|
+| Midnight Ink | `#0E1A2B` |
+| Polished Brass | `#C9A35B` |
+| Verdigris | `#3F8F82` |
+| Parchment | `#EADFC6` |
+| Starlight | `#BFD8FF` |
+
+### Zeitraum
+- **Start und Länge:** Start am 11.11.2026, 00:00 Uhr deutscher Zeit. Die Season läuft 90 Tage (`BattlePass.DEFAULT_LENGTH_DAYS`),
+  geplantes Ende ist der 9.2.2027.
+- **Welche Season läuft:** immer die neueste, deren Start erreicht ist. Gibt es nach dem Ende noch keine neue Season, läuft die
+  letzte weiter. Der Pass verschwindet also nie.
+- **Ohne neuen Build verschieben:** In `tools/backend/events.json` steht ein Abschnitt `"seasons"`:
+  ```json
+  "seasons": [
+    {"id": 2, "start": "2026-11-11T00:00:00+01:00", "end": "2027-02-09T00:00:00+01:00"}
+  ]
+  ```
+  - `end` ist optional. Ohne `end` gilt: Start plus 90 Tage.
+  - Zeiten immer mit Zeitzone angeben.
+  - Ungültige Einträge ignoriert der Server und schreibt sie ins Log. Unbekannte Seasons ignoriert der Client.
+  - Der Server liest die Datei bei jeder Anfrage neu. Der Client merkt sich die letzte Antwort im Cache und spielt damit auch
+    offline mit den richtigen Daten.
+- **Wechsel:** Beim Wechsel beginnen XP, abgeholte Stufen und Premium bei 0, wie bisher. Gewonnene Items bleiben für immer.
+- **Pass-Items nach dem Ende:** Nicht freigeschaltete Pass-Items gibt es danach nie wieder (`SEASON_ITEMS_RETURN_TO_SHOP = false`).
+
+### Pass-Aufbau (30 Stufen, 500 XP pro Stufe, Premium 1000 Goon Coins)
+- **Free:** Polaris (Stufe 5), Meridian (15), Star Lantern (25). Auf allen anderen Stufen gibt es Coins wie bisher.
+- **Premium:** Astrolabe (3), Astronomer's Cap (8), Little Orrery (12), Starchart (16), Armillary Crown (20), Sextant Wings (24),
+  Constellation (28), Atlas (30). Auf allen anderen Stufen gibt es Coins wie bisher.
+
+### Item-Tabelle (16 Cosmetics)
+
+| ID | Name | Typ | Seltenheit | Quelle | Preis |
+|---|---|---|---|---|---|
+| badge.polaris | Polaris | Badge | Uncommon | Pass Free, Stufe 5 | 140 |
+| badge.astrolabe | Astrolabe | Badge | Rare | Pass Premium, Stufe 3 | 260 |
+| nametag.meridian | Meridian | Nametag | Rare | Pass Free, Stufe 15 | 320 |
+| nametag.starchart | Starchart | Nametag | Epic | Pass Premium, Stufe 16 | 700 |
+| hat.astronomer | Astronomer's Cap | Hut | Rare | Pass Premium, Stufe 8 | 300 |
+| hat.armillary | Armillary Crown | Hut | Epic | Pass Premium, Stufe 20 | 850 |
+| accessory.starlantern | Star Lantern | Accessoire | Rare | Pass Free, Stufe 25 | 340 |
+| accessory.orrery | Little Orrery | Accessoire | Epic | Pass Premium, Stufe 12 | 750 |
+| wings.sextant | Sextant Wings | Flügel | Epic | Pass Premium, Stufe 24 | 900 |
+| aura.constellation | Constellation | Aura | **Legendary** | Pass Premium, Stufe 28 | 2400 |
+| cape.atlas | Atlas | Cape (animiert) | **Legendary** | Pass Premium, Stufe 30 | 2800 |
+| badge.quill | Quill | Badge | Common | Goon Shop | 50 |
+| nametag.brass | Brass | Nametag | Uncommon | Goon Shop | 150 |
+| accessory.loupe | Brass Loupe | Accessoire | Uncommon | Goon Shop | 120 |
+| cape.parchment | Parchment | Cape | Rare | Goon Shop | 320 |
+| wings.chartwings | Chart Wings | Flügel | Rare | Goon Shop | 380 |
+
+- **Preise in den Seltenheitsbändern:**
+
+  | Seltenheit | Preisband |
+  |---|---|
+  | Common | 20–60 |
+  | Uncommon | 80–160 |
+  | Rare | 200–400 |
+  | Epic | 500–1000 |
+  | Legendary | 1500–3000 |
+
+- **Pass-Items** sind exklusiv (`season(...)`): nicht kaufbar, nicht verschenkbar, nie in der Shop-Rotation. Der Preis dient nur
+  der Einordnung.
+- **Im Goon Shop** gibt es nur die fünf niedrigeren Teile (höchstens Rare).
+- **Darstellung:**
+  - **Badges:** neuer ruhiger Effekt „Glint“, ein seltenes, weiches Aufglänzen.
+  - **Nametags:** Meridian mit Messing und einer feinen Sternlicht-Linie. Starchart mit Sternen, die nacheinander aufleuchten.
+    Brass mit sanftem Glanz.
+  - **Capes:** Atlas ist ein Himmelsatlas mit Messing-Meridianen und einem Planeten, der in 8 Bildern seine Bahn läuft. Parchment
+    ist eine Sternkarte mit Gradnetz, Sternbild und Kompassrose.
+  - **3D-Modelle** über das ArtKit: zwei Hüte, drei Accessoires und zwei Flügelpaare.
+  - **Aura Constellation:** zwei drehende Messingringe und ein Sternbild, dessen Linien sich nacheinander zeichnen. Dazu
+    Sternenstaub, höchstens 56 Teilchen bei einer Grenze von 70.
+
+### Animation C „Neue Season“ (etwa 5 Sekunden, einmal pro Season und Konto)
+
+| Zeit | Ablauf |
+|---|---|
+| 0,0–0,9 s | Die Nacht zieht auf, Sterne erscheinen, die Ringe einer Armillarsphäre zeichnen sich. |
+| 0,5–1,6 s | Die Sphäre setzt sich zusammen und dreht sich ein. |
+| 1,6 s | Der Stern in der Mitte zündet: weicher Aufheller mit höchstens 0,30 Deckkraft, 160 ms lang, genau einmal. Bei „Voll“ dazu ein Beben von höchstens 2 px. |
+| 1,6–3,0 s | Strahlen, Lichtwellen und Funken. |
+| 1,8–3,2 s | „NEW SEASON“, „SEASON 2“, „ORRERY“ und der Untertitel erscheinen. |
+| 2,9–4,1 s | Die fünf besten Belohnungen erscheinen nacheinander als Karten. |
+| 4,3 s | Die Laufzeit-Zeile und die Knöpfe „View Battle Pass“ und „Close“ erscheinen. |
+
+- **Bedienung:** Ein Klick oder Esc springt zum Ende, ein zweites Esc schließt.
+- **Erstes Mal pro Season und Konto:** Ob die Animation schon lief, steht in der Datei `season.json` im Datenordner des Kontos,
+  getrennt von der Wallet.
+- **Wann sie startet:** hängt von der Einstellung „Season Animation“ ab.
+
+  | Einstellung | Verhalten |
+  |---|---|
+  | „Hint + next menu“ (Standard) | Hinweis oben im HUD; die Animation startet beim nächsten Menü (Pause, Inventar, GoonClient-Menü oder Hauptmenü). |
+  | „Open at once“ | Die Animation startet sofort. |
+  | „Hint only“ | Nur der Hinweis, bis das GoonClient-Menü geöffnet wird. |
+
+- **Noch einmal ansehen:** Im Battle Pass gibt es jederzeit den Knopf „Season intro“.
+
+### Animation D „Battle Pass freigeschaltet“ (etwa 4,5 Sekunden)
+- **Nur nach einem bestätigten Kauf:** Sie startet erst, wenn `ShopService.buyPremium()` Erfolg meldet. Der Kauf ist dann schon
+  gebucht und gespeichert.
+- **Bucht nichts:** Die Animation liest die Wallet nur, um die abholbaren Belohnungen zu zählen.
+
+| Zeit | Ablauf |
+|---|---|
+| ab 0 s | Der Pass, eine Messing-Urkunde, gleitet herein. |
+| 0,5–1,2 s | Das Siegel lädt sich mit Sternlicht auf und zittert bei „Voll“ leicht (höchstens 0,05 rad). |
+| 1,2 s | Der Siegelring öffnet sich: Aufheller mit höchstens 0,30 Deckkraft, 150 ms lang. |
+| ab 1,2 s | Die 30 Premium-Stufen leuchten nacheinander auf. |
+| ab 1,5 s | „PREMIUM UNLOCKED“ erscheint. |
+| ab 2,0 s | Die besten Premium-Belohnungen erscheinen als Karten. |
+| ab 3,1 s | „N premium rewards are ready to claim“ erscheint. |
+| ab 3,9 s | Der Knopf erscheint. |
+
+### Einstellungen (Settings → Abschnitt „Season“)
+- **Season Animation:** siehe oben.
+- **Season Effects:** Full, Reduced oder Off.
+  - Reduced: kein Aufheller, kein Wackeln und kein Federn, weniger Strahlen und Teilchen.
+  - Off: sofort der Endzustand.
+  - „Reduce Animations“ macht aus Full immer Reduced.
+- **Season Sound:** gestimmte Minecraft-Klänge (Beacon, Amethyst, Glocke, Falltür, Level-up), ohne eigene Sounddateien.
+- **Vorschau-Knöpfe:** „Preview season intro“ und „Preview pass unlock“ zeigen beide Animationen mit dem Hinweis „PREVIEW – nothing
+  is booked“. Sie buchen nichts und ändern den Merker nicht.
+
+### Grenzen und Technik
+- **Zeitlinien:** `season/SeasonTimeline` und `season/PassTimeline` sind reine Funktionen der Zeit, ohne Minecraft und unabhängig
+  von der Bildrate.
+- **Teilchen:** höchstens 150 gleichzeitig (Funken und Staub). Sie liegen in festen Arrays, damit pro Bild keine Objekte
+  entstehen.
+- **Light Themes:** Pergament statt Nachthimmel und Tinte statt hellem Text, damit alles lesbar bleibt.
+
+### Was am bestehenden Code geändert wurde
+- **`BattlePass`:** Eine Season hat jetzt Thema, Untertitel, Palette, Start, Länge und Highlights. `currentId()` ergibt sich aus
+  den Startzeiten (die feste Konstante `CURRENT` ist weg). Neu sind `setOverrides`, `startOf`, `endOf` und `daysLeft`.
+  Belohnungen, Preise und XP bleiben unverändert.
+- **`Wallet.migrateMonthSeason`:** Alte Monats-Seasons aus 3.48/3.49 gehen fest in Season 1, nicht mehr in die laufende Season.
+  So bringt so ein uraltes Konto kein Premium in Season 2 mit. Kauf, Abholen und Fortschritt sind unverändert.
+- **`Events`:** liest den optionalen Abschnitt `seasons` und speichert ihn im Cache.
+- **`server.py`:** gibt den Abschnitt `seasons` aus `events.json` weiter (Antwort `/v1/events`), mit Prüfung. Alte Clients
+  ignorieren das Feld.
+- **`BattlePassPage`:**
+  - Der Kopf zeigt Thema, Untertitel, Resttage und den Knopf „Season intro“.
+  - Nach einem erfolgreichen Premium-Kauf startet die Pass-Animation.
+- **`ClientSettings`:** drei neue Einstellungen in einem eigenen Abschnitt.
+- **`UiSounds`:** sechs neue Klänge und `playSeason`.
+- **`HudManager`:** neuer Season-Hinweis.
+- **`GoonClientClient`:** ruft `SeasonManager.tick` auf.
+- **Neue Cosmetics:**
+  - `ShopCatalog`, `ItemPresets`, `BadgeStyles` (Effekt Glint), `NametagStyles`, `NametagColors`, `CapeDesigns`, `CapeArt`
+    (Muster ATLAS und CHART).
+  - `ArtHats`, `ArtAccessories`, `ArtWings`, `AccessoryDesigns`, `AuraEngine` und `AuraExtras`.
+  - Texturen neu erzeugt mit `GenerateCapes` und `GenerateCosmeticAccessories`.
+
+### So legst du eine neue Season an
+1. In `BattlePass.SEASONS` einen Eintrag `new Season(3, "Thema", "Untertitel", palette, start, 90, free, premium, highlights)`
+   anlegen. `free` und `premium` sind die Item-Stufen, die Palette hat 5 Farben (Grund, Hauptakzent, Zweitakzent, hell, Licht).
+2. Die Items in `ShopCatalog` mit `season(...)` anlegen: Pass-exklusiv, Preis im Seltenheitsband. Shop-Teile kommen mit
+   `add(...)` dazu, nur niedrigere Seltenheiten.
+3. Die Darstellung ergänzen, je nach Art:
+   - Badge: `BadgeStyles`
+   - Nametag: `NametagStyles`, `NametagColors`, `ItemPresets`
+   - Cape: `CapeArt` und `CapeDesigns`, danach `GenerateCapes` laufen lassen
+   - Hut, Accessoire oder Flügel: `Art*`, danach `GenerateCosmeticAccessories`
+   - Aura: `AuraEngine.IDS`, `AuraExtras` und `AccessoryDesigns.newAura`
+4. Den Termin bei Bedarf ohne neuen Build in `events.json` unter `seasons` verschieben.
+5. Testen mit `tools/SeasonTest` (prüft Ids, Preisbänder, Exklusivität und Zeitlinien) und `tools/ShopLogicTest`.
+
+### Tests
+- **`tools/SeasonTest` (neu):**
+  - Zeitraum und Wechsel, auch mit Terminen aus dem Backend.
+  - Merker „einmal pro Season“: übersteht einen Neustart, gilt pro Kontoordner, eine kaputte Datei führt nie zum Absturz.
+  - Pass-Definition: Ids, Backend-Regel, Preisbänder, Exklusivität. Shop-Teile tauchen in der Rotation auf, Pass-Teile nie.
+  - Alte Wallet-Dateien laden unverändert.
+  - Premium wird genau einmal gekauft und abgebucht, auch nach einem Neustart. Items bleiben nach dem Season-Ende.
+  - Zeitlinien: monoton, Aufheller höchstens 0,30 und unter 200 ms, genau einmal, höchstens 150 Teilchen. Reduced und Off haben
+    weder Aufheller noch Wackeln.
+- **`tools/backend/test_backend.py`:** der Abschnitt `seasons` mit gültigen und ungültigen Einträgen.
+- **Spieltest (Screenshots):**
+  - Beide Animationen zu je 7 Zeitpunkten in drei Themes, dazu alle 16 Cosmetics in drei Themes.
+  - Echter Ablauf: Hinweis im HUD, Start beim nächsten Menü, Kauf mit 1000 Coins genau einmal, dann die Pass-Animation.
+
 ## Update 3.100.0: Admin nur über ADMIN_UUIDS (ohne /op)
 
 Ersetzt das zweistufige Modell aus 3.99.0. Operator-Rechte auf einem Minecraft-Server spielen keine Rolle mehr.

@@ -69,7 +69,8 @@ Schnittstelle (alles JSON):
   POST /v1/gifts/send   {"id", "to", "coins", "item"} -> {"status": "pending" | "claimed"} (wiederholbar mit derselben Id)
   GET  /v1/gifts                           -> {"incoming": [{"id","from","fromName","coins","item"}], "sent": {"<id>": claimed}}
   POST /v1/gifts/claim  {"id"}             -> {"ok": true}, 404 ohne solches Geschenk
-  GET  /v1/events                          -> {"events": [...]} aus events.json (Event-Shops: Termine, Währung, Items;
+  GET  /v1/events                          -> {"events": [...], "seasons": [...]} aus events.json (Event-Shops: Termine, Währung, Items;
+                                              "seasons": optionale Start-/Endzeiten der Battle-Pass-Seasons;
                                               ohne Anmeldung, neue Termine ohne neue Client-Version)
 """
 import argparse
@@ -1016,12 +1017,13 @@ class Events:
         self.lock = threading.Lock()
         self.mtime = None
         self.events = []
+        self.seasons = []
 
     def _reload(self):
         try:
             mtime = os.path.getmtime(self.path)
         except OSError:
-            self.events, self.mtime = [], None
+            self.events, self.seasons, self.mtime = [], [], None
             return
         if mtime == self.mtime:
             return
@@ -1038,12 +1040,45 @@ class Events:
                 print("events.json: invalid entry skipped: %r" % (e,))
             elif all(x["id"] != clean["id"] for x in out):
                 out.append(clean)
-        self.events, self.mtime = out[:8], mtime
+        seasons = []
+        for s in raw.get("seasons", []) if isinstance(raw, dict) and isinstance(raw.get("seasons"), list) else []:
+            clean = clean_season(s)
+            if clean is None:
+                print("events.json: invalid season skipped: %r" % (s,))
+            elif all(x["id"] != clean["id"] for x in seasons):
+                seasons.append(clean)
+        self.events, self.seasons, self.mtime = out[:8], seasons[:16], mtime
 
     def all(self):
         with self.lock:
             self._reload()
             return list(self.events)
+
+    def all_seasons(self):
+        with self.lock:
+            self._reload()
+            return list(self.seasons)
+
+
+MAX_SEASON_DAYS = 366
+
+
+def clean_season(s):
+    """Battle-Pass-Season verschieben: {"id": 2, "start": "2026-11-11T00:00:00+01:00", "end": "2027-02-09T00:00:00+01:00"} (end optional)."""
+    if not isinstance(s, dict):
+        return None
+    sid = s.get("id")
+    if not isinstance(sid, int) or isinstance(sid, bool) or not 1 <= sid <= 999:
+        return None
+    start = parse_event_time(s.get("start"))
+    if start is None or start < 0:
+        return None
+    end = 0
+    if s.get("end") is not None:
+        end = parse_event_time(s.get("end"))
+        if end is None or end <= start or end - start > MAX_SEASON_DAYS * 86400 * 1000:
+            return None
+    return {"id": sid, "startMs": start, "endMs": end}
 
 
 def clean_event(e):
@@ -1731,7 +1766,7 @@ def make_handler(state):
             if path == "/v1/events":
                 if not self.guard("events", 60):
                     return True
-                self.send_json(200, {"events": state.events.all()})
+                self.send_json(200, {"events": state.events.all(), "seasons": state.events.all_seasons()})
                 return True
             if path == "/v1/site":
                 if not self.guard("site", 120):
